@@ -17,7 +17,7 @@ class conv_batch_norm(pt.VarStoreMethod):
             self.gamma = self.variable("gamma", [shp], init=tf.random_normal_initializer(1., 0.02))
             self.beta = self.variable("beta", [shp], init=tf.constant_initializer(0.))
 
-            self.mean, self.variance = tf.nn.moments(input_layer.tensor, [0, 1, 2])
+            self.mean, self.variance = tf.nn.moments(input_layer.tensor, [0, 1, 2, 3])
             # sigh...tf's shape system is so..
             self.mean.set_shape((shp,))
             self.variance.set_shape((shp,))
@@ -50,6 +50,17 @@ class fc_batch_norm(conv_batch_norm):
         normalized_x = super(self.__class__, self).__call__(input_layer.with_tensor(x), *args, **kwargs)  # input_layer)
         return normalized_x.reshape(ori_shape)
 
+
+@pt.Register(assign_defaults=('phase'))
+class fc_batch_norm_3d(conv_batch_norm):
+    def __call__(self, input_layer, *args, **kwargs):
+        ori_shape = input_layer.shape
+        if ori_shape[0] is None:
+            ori_shape[0] = -1
+        new_shape = [ori_shape[0], 1, 1, 1, ori_shape[1]]
+        x = tf.reshape(input_layer.tensor, new_shape)
+        normalized_x = super(self.__class__, self).__call__(input_layer.with_tensor(x), *args, **kwargs)  # input_layer)
+        return normalized_x.reshape(ori_shape)
 
 def leaky_rectify(x, leakiness=0.01):
     assert leakiness <= 1
