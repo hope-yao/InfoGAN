@@ -85,3 +85,61 @@ class MnistDataset(object):
 
     def inverse_transform(self, data):
         return data
+
+
+class ModelNet10(object):
+    def __init__(self):
+        # data_directory = "ModelNet10"
+        from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
+        from tensorflow.python.framework import dtypes
+        dtype = dtypes.float32
+        reshape = False
+
+        from fuel.datasets.hdf5 import H5PYDataset
+        train_set = H5PYDataset('ModelNet10/ModelNet10.hdf5', which_sets=('train',))
+        handle = train_set.open()
+        train_data = train_set.get_data(handle, slice(0, train_set.num_examples))
+        train_images = train_data[0]
+        train_images = train_images.reshape(train_images.shape[0], train_images.shape[2] * train_images.shape[3] * train_images.shape[4])
+        train_labels = train_data[1]
+
+        validation_size = int(0.1*train_set.num_examples)
+        validation_images = train_images[:validation_size]
+        validation_labels = train_labels[:validation_size]
+        train_images = train_images[validation_size:]
+        train_labels = train_labels[validation_size:]
+
+        test_set = H5PYDataset('ModelNet10/ModelNet10.hdf5', which_sets=('test',))
+        handle = test_set.open()
+        test_data = test_set.get_data(handle, slice(0, test_set.num_examples))
+        test_images = test_data[0]
+        test_images = test_images.reshape(test_images.shape[0], test_images.shape[2] * test_images.shape[3] * test_images.shape[4])
+        test_labels = test_data[1]
+
+        self.train = DataSet(train_images, train_labels, dtype=dtype, reshape=reshape)
+        self.validation = DataSet(validation_images, validation_labels, dtype=dtype, reshape=reshape)
+        self.test = DataSet(test_images, test_labels, dtype=dtype, reshape=reshape)
+
+        # make sure that each type of digits have exactly 10 samples
+        sup_images = []
+        sup_labels = []
+        rnd_state = np.random.get_state()
+        np.random.seed(0)
+        for cat in range(10):
+            ids = np.where(self.train.labels == cat)[0]
+            np.random.shuffle(ids)
+            sup_images.extend(self.train.images[ids[:10]])
+            sup_labels.extend(self.train.labels[ids[:10]])
+        np.random.set_state(rnd_state)
+        self.supervised_train = Dataset(
+            np.asarray(sup_images),
+            np.asarray(sup_labels),
+        )
+        self.image_dim = 32 * 32 * 32
+        self.image_shape = (32, 32, 32, 1)
+
+    def transform(self, data):
+        return data
+
+    def inverse_transform(self, data):
+        return data

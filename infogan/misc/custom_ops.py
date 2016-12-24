@@ -72,6 +72,20 @@ class custom_conv2d(pt.VarStoreMethod):
             # import ipdb; ipdb.set_trace()
             return input_layer.with_tensor(tf.nn.bias_add(conv, biases), parameters=self.vars)
 
+@pt.Register
+class custom_conv3d(pt.VarStoreMethod):
+    def __call__(self, input_layer, output_dim,
+                 k_h=5, k_w=5, k_d=5, d_h=2, d_w=2, d_d=2, stddev=0.02, in_dim=None, padding='SAME',
+                 name="conv3d"):
+        with tf.variable_scope(name):
+            w = self.variable('w', [k_h, k_w, k_d, in_dim or input_layer.shape[-1], output_dim],
+                              init=tf.truncated_normal_initializer(stddev=stddev))
+            conv = tf.nn.conv3d(input_layer.tensor, w, strides=[1, d_h, d_w, d_d, 1], padding=padding)
+
+            biases = self.variable('biases', [output_dim], init=tf.constant_initializer(0.0))
+            # import ipdb; ipdb.set_trace()
+            return input_layer.with_tensor(tf.nn.bias_add(conv, biases), parameters=self.vars)
+
 
 @pt.Register
 class custom_deconv2d(pt.VarStoreMethod):
@@ -100,6 +114,33 @@ class custom_deconv2d(pt.VarStoreMethod):
 
             return deconv
 
+
+@pt.Register
+class custom_deconv3d(pt.VarStoreMethod):
+    def __call__(self, input_layer, output_shape,
+                 k_h=5, k_w=5, k_d=5, d_h=2, d_w=2, d_d=2, stddev=0.02,
+                 name="deconv3d"):
+        output_shape[0] = input_layer.shape[0]
+        ts_output_shape = tf.pack(output_shape)
+        with tf.variable_scope(name):
+            # filter : [height, width, output_channels, in_channels]
+            w = self.variable('w', [k_h, k_w, k_d, output_shape[-1], input_layer.shape[-1]],
+                              init=tf.random_normal_initializer(stddev=stddev))
+
+            try:
+                deconv = tf.nn.conv3d_transpose(input_layer, w,
+                                                output_shape=ts_output_shape,
+                                                strides=[1, d_h, d_w, d_d, 1])
+
+            # Support for versions of TensorFlow before 0.7.0
+            except AttributeError:
+                deconv = tf.nn.deconv3d(input_layer, w, output_shape=ts_output_shape,
+                                        strides=[1, d_h, d_w, d_d, 1])
+
+            biases = self.variable('biases', [output_shape[-1]], init=tf.constant_initializer(0.0))
+            deconv = tf.reshape(tf.nn.bias_add(deconv, biases), [-1] + output_shape[1:])
+
+            return deconv
 
 @pt.Register
 class custom_fully_connected(pt.VarStoreMethod):

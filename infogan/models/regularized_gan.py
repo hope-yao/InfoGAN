@@ -32,9 +32,11 @@ class RegularizedGAN(object):
                 shared_template = \
                     (pt.template("input").
                      reshape([-1] + list(image_shape)).
-                     custom_conv2d(64, k_h=4, k_w=4).
+                     # custom_conv2d(64, k_h=4, k_w=4).
+                     custom_conv3d(64, k_h=4, k_w=4, k_d=4).
                      apply(leaky_rectify).
-                     custom_conv2d(128, k_h=4, k_w=4).
+                     # custom_conv2d(128, k_h=4, k_w=4).
+                     custom_conv3d(128, k_h=4, k_w=4, k_d=4).
                      conv_batch_norm().
                      apply(leaky_rectify).
                      custom_fully_connected(1024).
@@ -57,11 +59,14 @@ class RegularizedGAN(object):
                      custom_fully_connected(image_size / 4 * image_size / 4 * 128).
                      fc_batch_norm().
                      apply(tf.nn.relu).
-                     reshape([-1, image_size / 4, image_size / 4, 128]).
-                     custom_deconv2d([0, image_size / 2, image_size / 2, 64], k_h=4, k_w=4).
+                     # reshape([-1, image_size / 4, image_size / 4, 128]).
+                     # custom_deconv2d([0, image_size / 2, image_size / 2, 64], k_h=4, k_w=4).
+                     reshape([-1, image_size / 4, image_size / 4, image_size / 4, 128]).
+                     custom_deconv3d([0, image_size / 2, image_size / 2, image_size / 2, 64], k_h=4, k_w=4, k_d=4).
                      conv_batch_norm().
                      apply(tf.nn.relu).
-                     custom_deconv2d([0] + list(image_shape), k_h=4, k_w=4).
+                     # custom_deconv2d([0] + list(image_shape), k_h=4, k_w=4).
+                     custom_deconv3d([0] + list(image_shape), k_h=4, k_w=4, k_d=4).
                      flatten())
         else:
             raise NotImplementedError
