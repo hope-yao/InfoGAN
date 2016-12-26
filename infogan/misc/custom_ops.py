@@ -21,16 +21,16 @@ class conv_batch_norm(pt.VarStoreMethod):
             # sigh...tf's shape system is so..
             self.mean.set_shape((shp,))
             self.variance.set_shape((shp,))
-            self.ema_apply_op = self.ema.apply([self.mean, self.variance])
+            # self.ema_apply_op = self.ema.apply([self.mean, self.variance])
 
             if phase == Phase.train:
-                with tf.control_dependencies([self.ema_apply_op]):
-                    normalized_x = tf.nn.batch_norm_with_global_normalization(
-                        input_layer.tensor, self.mean, self.variance, self.beta, self.gamma, epsilon,
-                        scale_after_normalization=True)
+                # with tf.control_dependencies([self.ema_apply_op]):
+                normalized_x = tf.nn.batch_norm_with_global_normalization(
+                    input_layer.tensor, self.mean, self.variance, self.beta, self.gamma, epsilon,
+                    scale_after_normalization=True)
             else:
                 normalized_x = tf.nn.batch_norm_with_global_normalization(
-                    x, self.ema.average(self.mean), self.ema.average(self.variance), self.beta,
+                    x, self.mean, self.variance, self.beta,
                     self.gamma, epsilon,
                     scale_after_normalization=True)
             return input_layer.with_tensor(normalized_x, parameters=self.vars)
