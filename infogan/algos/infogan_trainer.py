@@ -202,7 +202,7 @@ class InfoGANTrainer(object):
                 stacked_img.append(tf.concat(1, row_img))
             imgs = tf.concat(0, stacked_img)
             imgs = tf.expand_dims(imgs, 0)
-            tf.image_summary("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs)
+            # tf.image_summary("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs) # Hope: this should be changed into 3D
 
 
     def train(self):
