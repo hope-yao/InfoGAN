@@ -17,13 +17,13 @@ if __name__ == "__main__":
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
 
-    root_log_dir = "logs/mnist"
-    root_checkpoint_dir = "ckt/mnist"
+    root_log_dir = "logs/ModelNet"
+    root_checkpoint_dir = "ckt/ModelNet"
     batch_size = 128
     updates_per_epoch = 100
     max_epoch = 50
 
-    exp_name = "mnist_%s" % timestamp
+    exp_name = "ModelNet_%s" % timestamp
 
     log_dir = os.path.join(root_log_dir, exp_name)
     checkpoint_dir = os.path.join(root_checkpoint_dir, exp_name)
@@ -46,7 +46,7 @@ if __name__ == "__main__":
         latent_spec=latent_spec,
         batch_size=batch_size,
         image_shape=dataset.image_shape,
-        network_type="mnist",
+        network_type="ModelNet",
     )
 
     algo = InfoGANTrainer(
