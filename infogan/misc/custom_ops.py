@@ -177,5 +177,23 @@ class custom_fully_connected(pt.VarStoreMethod):
                 bias = self.variable("bias", [output_size], init=tf.constant_initializer(bias_start))
                 return input_layer.with_tensor(tf.matmul(input_, matrix) + bias, parameters=self.vars)
         except Exception:
-            # import ipdb; ipdb.set_trace()
+            import ipdb; ipdb.set_trace()
+
+@pt.Register
+class custom_fully_connected_3d(pt.VarStoreMethod):
+    def __call__(self, input_layer, output_size, scope=None, in_dim=None, stddev=0.02, bias_start=0.0):
+        shape = input_layer.shape
+        input_ = input_layer.tensor
+        try:
+            if len(shape) == 5:
+                input_ = tf.reshape(input_, tf.pack([tf.shape(input_)[0], np.prod(shape[1:])]))
+                input_.set_shape([None, np.prod(shape[1:])])
+                shape = input_.get_shape().as_list()
+
+            with tf.variable_scope(scope or "Linear"):
+                matrix = self.variable("Matrix", [in_dim or shape[1], output_size], dt=tf.float32,
+                                       init=tf.random_normal_initializer(stddev=stddev))
+                bias = self.variable("bias", [output_size], init=tf.constant_initializer(bias_start))
+                return input_layer.with_tensor(tf.matmul(input_, matrix) + bias, parameters=self.vars)
+        except Exception:
             print('here')
