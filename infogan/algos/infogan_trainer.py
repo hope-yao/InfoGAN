@@ -121,6 +121,7 @@ class InfoGANTrainer(object):
             self.generator_trainer = pt.apply_optimizer(generator_optimizer, losses=[generator_loss], var_list=g_vars)
 
             for k, v in self.log_vars:
+                # tf.scalar_summary(k, v)
                 tf.summary.scalar(k, v)
 
         with pt.defaults_scope(phase=pt.Phase.test):
@@ -202,7 +203,7 @@ class InfoGANTrainer(object):
                 stacked_img.append(tf.concat(1, row_img))
             imgs = tf.concat(0, stacked_img)
             imgs = tf.expand_dims(imgs, 0)
-            tf.summary.image("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs)
+            # tf.image_summary("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs) # Hope: this should be changed into 3D
 
 
     def train(self):
@@ -210,11 +211,15 @@ class InfoGANTrainer(object):
         self.init_opt()
 
         init = tf.initialize_all_variables()
+        # init = tf.global_variables_initializer
 
         with tf.Session() as sess:
             sess.run(init)
 
+            # summary_op = tf.merge_all_summaries()
             summary_op = tf.summary.merge_all()
+
+            # summary_writer = tf.train.SummaryWriter(self.log_dir, sess.graph)
             summary_writer = tf.summary.FileWriter(self.log_dir, sess.graph)
 
             saver = tf.train.Saver()
