@@ -14,24 +14,24 @@ import datetime
 
 if __name__ == "__main__":
 
+    network_type = "MNIST"
+
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
 
-    root_log_dir = "logs/ModelNet"
-    root_checkpoint_dir = "ckt/ModelNet"
+    root_log_dir = "logs/" + network_type
+    root_checkpoint_dir = "ckt/" + network_type
     batch_size = 128
     updates_per_epoch = 100
     max_epoch = 50
 
-    exp_name = "ModelNet_%s" % timestamp
+    exp_name =  network_type + "_%s" % timestamp
 
     log_dir = os.path.join(root_log_dir, exp_name)
     checkpoint_dir = os.path.join(root_checkpoint_dir, exp_name)
 
     mkdir_p(log_dir)
     mkdir_p(checkpoint_dir)
-
-    network_type = "MNIST"
 
     if network_type == "MNIST":
         dataset = MnistDataset()
@@ -43,6 +43,8 @@ if __name__ == "__main__":
     latent_spec = [
         (Uniform(62), False),
         (Categorical(10), True),
+        (Uniform(1, fix_std=True), True),
+        (Uniform(1, fix_std=True), True),
         (Uniform(1, fix_std=True), True),
         (Uniform(1, fix_std=True), True),
     ]
