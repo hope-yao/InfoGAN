@@ -31,8 +31,14 @@ if __name__ == "__main__":
     mkdir_p(log_dir)
     mkdir_p(checkpoint_dir)
 
-    # dataset = MnistDataset()
-    dataset = ModelNet10()
+    network_type = "MNIST"
+
+    if network_type == "MNIST":
+        dataset = MnistDataset()
+    elif network_type == "ModelNet":
+        dataset = ModelNet10()
+    else:
+        raise NotImplementedError
 
     latent_spec = [
         (Uniform(62), False),
@@ -46,7 +52,7 @@ if __name__ == "__main__":
         latent_spec=latent_spec,
         batch_size=batch_size,
         image_shape=dataset.image_shape,
-        network_type="ModelNet",
+        network_type=network_type,
     )
 
     algo = InfoGANTrainer(

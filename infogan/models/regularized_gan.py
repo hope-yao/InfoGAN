@@ -27,7 +27,7 @@ class RegularizedGAN(object):
         self.reg_disc_latent_dist = Product([x for x in self.reg_latent_dist.dists if isinstance(x, (Categorical, Bernoulli))])
 
         image_size = image_shape[0]
-        if network_type == "mnist":
+        if network_type == "ModelNet":
             with tf.variable_scope("d_net"):
                 shared_template = \
                     (pt.template("input").
@@ -37,7 +37,7 @@ class RegularizedGAN(object):
                      apply(leaky_rectify).
                      # custom_conv2d(128, k_h=4, k_w=4).
                      custom_conv3d(128, k_h=4, k_w=4, k_d=4).
-                     conv_batch_norm().
+                     conv_batch_norm_3d().
                      apply(leaky_rectify).
                      custom_fully_connected_3d(1024).
                      fc_batch_norm_3d().
@@ -63,10 +63,46 @@ class RegularizedGAN(object):
                      # custom_deconv2d([0, image_size / 2, image_size / 2, 64], k_h=4, k_w=4).
                      reshape([-1, image_size / 4, image_size / 4, image_size / 4, 128]).
                      custom_deconv3d([0, image_size / 2, image_size / 2, image_size / 2, 64], k_h=4, k_w=4, k_d=4).
-                     conv_batch_norm().
+                     conv_batch_norm_3d().
                      apply(tf.nn.relu).
                      # custom_deconv2d([0] + list(image_shape), k_h=4, k_w=4).
                      custom_deconv3d([0] + list(image_shape), k_h=4, k_w=4, k_d=4).
+                     flatten())
+        elif network_type == "MNIST":
+            with tf.variable_scope("d_net"):
+                shared_template = \
+                    (pt.template("input").
+                     reshape([-1] + list(image_shape)).
+                     custom_conv2d(64, k_h=4, k_w=4).
+                     apply(leaky_rectify).
+                     custom_conv2d(128, k_h=4, k_w=4).
+                     conv_batch_norm().
+                     apply(leaky_rectify).
+                     custom_fully_connected(1024).
+                     fc_batch_norm().
+                     apply(leaky_rectify))
+                self.discriminator_template = shared_template.custom_fully_connected(1)
+                self.encoder_template = \
+                    (shared_template.
+                     custom_fully_connected(128).
+                     fc_batch_norm().
+                     apply(leaky_rectify).
+                     custom_fully_connected(self.reg_latent_dist.dist_flat_dim))
+
+            with tf.variable_scope("g_net"):
+                self.generator_template = \
+                    (pt.template("input").
+                     custom_fully_connected(1024).
+                     fc_batch_norm().
+                     apply(tf.nn.relu).
+                     custom_fully_connected(image_size / 4 * image_size / 4 * 128).
+                     fc_batch_norm().
+                     apply(tf.nn.relu).
+                     reshape([-1, image_size / 4, image_size / 4, 128]).
+                     custom_deconv2d([0, image_size / 2, image_size / 2, 64], k_h=4, k_w=4).
+                     conv_batch_norm().
+                     apply(tf.nn.relu).
+                     custom_deconv2d([0] + list(image_shape), k_h=4, k_w=4).
                      flatten())
         else:
             raise NotImplementedError
