@@ -81,7 +81,7 @@ class RegularizedGAN(object):
                      custom_fully_connected(1024).
                      fc_batch_norm().
                      apply(leaky_rectify))
-                self.discriminator_template = shared_template.custom_fully_connected(1)
+                self.discriminator_template = shared_template.custom_fully_connected(10)
                 self.encoder_template = \
                     (shared_template.
                      custom_fully_connected(128).
@@ -107,9 +107,10 @@ class RegularizedGAN(object):
         else:
             raise NotImplementedError
 
-    def discriminate(self, x_var):
+    def discriminate(self, x_var, label):
         d_out = self.discriminator_template.construct(input=x_var)
-        d = tf.nn.sigmoid(d_out[:, 0])
+        # d = tf.nn.sigmoid(d_out[:, 0])  # Modified by Hope, for supervised learning
+        d = tf.nn.softmax_cross_entropy_with_logits(d_out,label)
         reg_dist_flat = self.encoder_template.construct(input=x_var)
         reg_dist_info = self.reg_latent_dist.activate_dist(reg_dist_flat)
         return d, self.reg_latent_dist.sample(reg_dist_info), reg_dist_info, reg_dist_flat

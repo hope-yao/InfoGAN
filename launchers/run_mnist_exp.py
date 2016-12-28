@@ -15,13 +15,14 @@ import datetime
 if __name__ == "__main__":
 
     network_type = "MNIST"
+    switch_categorical_label = True # Modified by Hope, for supervised learning
 
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
 
     root_log_dir = "logs/" + network_type
     root_checkpoint_dir = "ckt/" + network_type
-    batch_size = 128
+    batch_size = 100
     updates_per_epoch = 100
     max_epoch = 50
 
@@ -34,9 +35,9 @@ if __name__ == "__main__":
     mkdir_p(checkpoint_dir)
 
     if network_type == "MNIST":
-        dataset = MnistDataset()
+        dataset = MnistDataset(switch_categorical_label)
     elif network_type == "ModelNet":
-        dataset = ModelNet10()
+        dataset = ModelNet10(switch_categorical_label)
     else:
         raise NotImplementedError
 
