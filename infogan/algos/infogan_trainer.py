@@ -56,8 +56,12 @@ class InfoGANTrainer(object):
 
             reg_z = self.model.reg_z(z_var)
 
-            discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY))
-            generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
+            self.real_d = real_d
+            self.fake_d = fake_d
+            discriminator_loss = - tf.reduce_mean((real_d + TINY) + (1. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
+            generator_loss = - tf.reduce_mean((fake_d + TINY))
+            # discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
+            # generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
 
             self.log_vars.append(("discriminator_loss", discriminator_loss))
             self.log_vars.append(("generator_loss", generator_loss))
