@@ -24,7 +24,7 @@ if __name__ == "__main__":
     root_checkpoint_dir = "ckt/" + network_type
     batch_size = 100
     updates_per_epoch = 100
-    max_epoch = 50
+    max_epoch = 500
 
     exp_name =  network_type + "_%s" % timestamp
 

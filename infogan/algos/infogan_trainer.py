@@ -56,15 +56,14 @@ class InfoGANTrainer(object):
 
             reg_z = self.model.reg_z(z_var)
 
-            self.real_d = real_d
-            self.fake_d = fake_d
-            discriminator_loss = - tf.reduce_mean((real_d + TINY) + (1. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
-            generator_loss = - tf.reduce_mean((fake_d + TINY))
+
+            discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(4. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
+            generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
             # discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
             # generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
 
-            self.log_vars.append(("discriminator_loss", discriminator_loss))
-            self.log_vars.append(("generator_loss", generator_loss))
+            self.log_vars.append(("discriminator_loss", tf.reduce_mean(discriminator_loss )))
+            self.log_vars.append(("generator_loss", tf.reduce_mean(generator_loss )))
 
             mi_est = tf.constant(0.)
             cross_ent = tf.constant(0.)
@@ -85,7 +84,7 @@ class InfoGANTrainer(object):
                 self.log_vars.append(("CrossEnt_disc", disc_cross_ent))
                 discriminator_loss -= self.info_reg_coeff * disc_mi_est
                 generator_loss -= self.info_reg_coeff * disc_mi_est
-
+            # continuous:
             if len(self.model.reg_cont_latent_dist.dists) > 0:
                 cont_reg_z = self.model.cont_reg_z(reg_z)
                 cont_reg_dist_info = self.model.cont_reg_dist_info(fake_reg_z_dist_info)
