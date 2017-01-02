@@ -46,20 +46,27 @@ class InfoGANTrainer(object):
 
     def init_opt(self):
         self.input_tensor = input_tensor = tf.placeholder(tf.float32, [self.batch_size, self.dataset.image_dim])
+        self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 10]) # 10 different classes
 
         with pt.defaults_scope(phase=pt.Phase.train):
             z_var = self.model.latent_dist.sample_prior(self.batch_size)
             fake_x, _ = self.model.generate(z_var)
             real_d, _, _, _ = self.model.discriminate(input_tensor)
-            fake_d, _, fake_reg_z_dist_info, _ = self.model.discriminate(fake_x)
+            fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
+
+            prediction = self.model.disc_reg_dist_info(fake_reg_z_dist_info)['id_0_prob']
+            classifier_loss = -tf.reduce_sum(input_label * tf.log(prediction+TINY))
 
             reg_z = self.model.reg_z(z_var)
 
+            # discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(4. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
+            # generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
             discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY))
-            generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
+            generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY)) #+ classifier_loss*0.001
 
-            self.log_vars.append(("discriminator_loss", discriminator_loss))
-            self.log_vars.append(("generator_loss", generator_loss))
+            self.log_vars.append(("classifier_loss", tf.reduce_mean(classifier_loss)))
+            self.log_vars.append(("discriminator_loss", tf.reduce_mean(discriminator_loss )))
+            self.log_vars.append(("generator_loss", tf.reduce_mean(generator_loss )))
 
             mi_est = tf.constant(0.)
             cross_ent = tf.constant(0.)
@@ -80,7 +87,7 @@ class InfoGANTrainer(object):
                 self.log_vars.append(("CrossEnt_disc", disc_cross_ent))
                 discriminator_loss -= self.info_reg_coeff * disc_mi_est
                 generator_loss -= self.info_reg_coeff * disc_mi_est
-
+            # continuous:
             if len(self.model.reg_cont_latent_dist.dists) > 0:
                 cont_reg_z = self.model.cont_reg_z(reg_z)
                 cont_reg_dist_info = self.model.cont_reg_dist_info(fake_reg_z_dist_info)
@@ -203,7 +210,8 @@ class InfoGANTrainer(object):
                 stacked_img.append(tf.concat(1, row_img))
             imgs = tf.concat(0, stacked_img)
             imgs = tf.expand_dims(imgs, 0)
-            # tf.image_summary("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs) # Hope: this should be changed into 3D
+            if self.model.network_type == "MNIST":
+                tf.summary.image("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs) # Hope: this should be changed into 3D
 
 
     def train(self):
@@ -237,8 +245,8 @@ class InfoGANTrainer(object):
                 all_log_vals = []
                 for i in range(self.updates_per_epoch):
                     pbar.update(i)
-                    x, _ = self.dataset.train.next_batch(self.batch_size)
-                    feed_dict = {self.input_tensor: x}
+                    x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                    feed_dict = {self.input_tensor: x, self.input_label: y}
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
                     sess.run(self.generator_trainer, feed_dict)
                     all_log_vals.append(log_vals)
@@ -249,9 +257,9 @@ class InfoGANTrainer(object):
                         fn = saver.save(sess, "%s/%s.ckpt" % (self.checkpoint_dir, snapshot_name))
                         print("Model saved in file: %s" % fn)
 
-                x, _ = self.dataset.train.next_batch(self.batch_size)
+                x, y = self.dataset.supervised_train.next_batch(self.batch_size)
 
-                summary_str = sess.run(summary_op, {self.input_tensor: x})
+                summary_str = sess.run(summary_op, {self.input_tensor: x, self.input_label: y})
                 summary_writer.add_summary(summary_str, counter)
 
                 avg_log_vals = np.mean(np.array(all_log_vals), axis=0)

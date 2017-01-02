@@ -68,7 +68,7 @@ class RegularizedGAN(object):
                      # custom_deconv2d([0] + list(image_shape), k_h=4, k_w=4).
                      custom_deconv3d([0] + list(image_shape), k_h=4, k_w=4, k_d=4).
                      flatten())
-        elif network_type == "MNIST":
+        elif network_type == "mnist":
             with tf.variable_scope("d_net"):
                 shared_template = \
                     (pt.template("input").
@@ -110,6 +110,8 @@ class RegularizedGAN(object):
     def discriminate(self, x_var):
         d_out = self.discriminator_template.construct(input=x_var)
         d = tf.nn.sigmoid(d_out[:, 0])
+        # d = tf.nn.softmax(d_out)
+        # d = tf.nn.softmax_cross_entropy_with_logits(d,label) # Modified by Hope, for supervised learning
         reg_dist_flat = self.encoder_template.construct(input=x_var)
         reg_dist_info = self.reg_latent_dist.activate_dist(reg_dist_flat)
         return d, self.reg_latent_dist.sample(reg_dist_info), reg_dist_info, reg_dist_flat

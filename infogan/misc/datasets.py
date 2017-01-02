@@ -5,9 +5,13 @@ import numpy as np
 
 
 class Dataset(object):
-    def __init__(self, images, labels=None):
+    def __init__(self, images, labels=None, switch_categorical_label=False ):
         self._images = images.reshape(images.shape[0], -1)
-        self._labels = labels
+        self._switch_categorical_label = switch_categorical_label
+        if switch_categorical_label:
+            self._labels = self.convert_label(labels) # Modified by Hope
+        else:
+            self._labels = labels
         self._epochs_completed = -1
         self._num_examples = images.shape[0]
         # shuffle on first run
@@ -28,6 +32,14 @@ class Dataset(object):
     @property
     def epochs_completed(self):
         return self._epochs_completed
+
+    def convert_label(self, labels):
+        categorical_labels = np.zeros((labels.shape[0], 10))
+        for idx, label in enumerate(labels):
+            cat_label = np.zeros(10)
+            cat_label[label] = 1
+            categorical_labels[idx] = cat_label
+        return categorical_labels
 
     def next_batch(self, batch_size):
         """Return the next `batch_size` examples from this data set."""
@@ -50,11 +62,14 @@ class Dataset(object):
         if self._labels is None:
             return self._images[start:end], None
         else:
-            return self._images[start:end], self._labels[start:end]
+            if self._switch_categorical_label:
+                return self._images[start:end], self._labels[start:end,:]
+            else:
+                return self._images[start:end], self._labels[start:end]
 
 
 class MnistDataset(object):
-    def __init__(self):
+    def __init__(self,switch_categorical_label):
         data_directory = "MNIST"
         if not os.path.exists(data_directory):
             os.makedirs(data_directory)
@@ -74,6 +89,7 @@ class MnistDataset(object):
         self.supervised_train = Dataset(
             np.asarray(sup_images),
             np.asarray(sup_labels),
+            switch_categorical_label=switch_categorical_label
         )
         self.test = dataset.test
         self.validation = dataset.validation
@@ -88,7 +104,7 @@ class MnistDataset(object):
 
 
 class ModelNet10(object):
-    def __init__(self):
+    def __init__(self,switch_categorical_label):
         # data_directory = "ModelNet10"
         from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
         from tensorflow.python.framework import dtypes
@@ -134,6 +150,7 @@ class ModelNet10(object):
         self.supervised_train = Dataset(
             np.asarray(sup_images),
             np.asarray(sup_labels),
+            switch_categorical_label = switch_categorical_label
         )
         self.image_dim = 32 * 32 * 32
         self.image_shape = (32, 32, 32, 1)
@@ -143,3 +160,4 @@ class ModelNet10(object):
 
     def inverse_transform(self, data):
         return data
+
