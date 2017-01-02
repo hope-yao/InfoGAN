@@ -51,17 +51,20 @@ class InfoGANTrainer(object):
         with pt.defaults_scope(phase=pt.Phase.train):
             z_var = self.model.latent_dist.sample_prior(self.batch_size)
             fake_x, _ = self.model.generate(z_var)
-            real_d, _, _, _ = self.model.discriminate(input_tensor, input_label)
-            fake_d, _, fake_reg_z_dist_info, _ = self.model.discriminate(fake_x, input_label)
+            real_d, _, _, _ = self.model.discriminate(input_tensor)
+            fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
+
+            prediction = self.model.disc_reg_dist_info(fake_reg_z_dist_info)['id_0_prob']
+            classifier_loss = -tf.reduce_sum(input_label * tf.log(prediction+TINY))
 
             reg_z = self.model.reg_z(z_var)
 
-
-            discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(4. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
-            generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
-            # discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
+            # discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(4. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
             # generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
+            discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY))
+            generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY)) #+ classifier_loss*0.001
 
+            self.log_vars.append(("classifier_loss", tf.reduce_mean(classifier_loss)))
             self.log_vars.append(("discriminator_loss", tf.reduce_mean(discriminator_loss )))
             self.log_vars.append(("generator_loss", tf.reduce_mean(generator_loss )))
 
