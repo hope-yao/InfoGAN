@@ -4,7 +4,7 @@ import os
 import numpy as np
 
 
-class Dataset(object):
+class supervised_Dataset(object):
     def __init__(self, images, labels=None, switch_categorical_label=False ):
         self._images = images.reshape(images.shape[0], -1)
         self._switch_categorical_label = switch_categorical_label
@@ -83,10 +83,10 @@ class MnistDataset(object):
         for cat in range(10):
             ids = np.where(self.train.labels == cat)[0]
             np.random.shuffle(ids)
-            sup_images.extend(self.train.images[ids[:10]])
-            sup_labels.extend(self.train.labels[ids[:10]])
+            sup_images.extend(self.train.images[ids])
+            sup_labels.extend(self.train.labels[ids])
         np.random.set_state(rnd_state)
-        self.supervised_train = Dataset(
+        self.supervised_train = supervised_Dataset(
             np.asarray(sup_images),
             np.asarray(sup_labels),
             switch_categorical_label=switch_categorical_label
@@ -147,7 +147,7 @@ class ModelNet10(object):
             sup_images.extend(self.train.images[ids[:10]])
             sup_labels.extend(self.train.labels[ids[:10]])
         np.random.set_state(rnd_state)
-        self.supervised_train = Dataset(
+        self.supervised_train = supervised_Dataset(
             np.asarray(sup_images),
             np.asarray(sup_labels),
             switch_categorical_label = switch_categorical_label

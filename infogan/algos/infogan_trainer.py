@@ -62,7 +62,7 @@ class InfoGANTrainer(object):
             # discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(4. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
             # generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
             discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY))
-            generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY)) #+ classifier_loss*0.001
+            generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY)) + classifier_loss*0.01
 
             self.log_vars.append(("classifier_loss", tf.reduce_mean(classifier_loss)))
             self.log_vars.append(("discriminator_loss", tf.reduce_mean(discriminator_loss )))
@@ -210,7 +210,7 @@ class InfoGANTrainer(object):
                 stacked_img.append(tf.concat(1, row_img))
             imgs = tf.concat(0, stacked_img)
             imgs = tf.expand_dims(imgs, 0)
-            if self.model.network_type == "MNIST":
+            if self.model.network_type == "mnist":
                 tf.summary.image("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs) # Hope: this should be changed into 3D
 
 
