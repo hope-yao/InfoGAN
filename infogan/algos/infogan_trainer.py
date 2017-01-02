@@ -65,8 +65,6 @@ class InfoGANTrainer(object):
 
             reg_z = self.model.reg_z(z_var)
 
-            # discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(4. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
-            # generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
             discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY))
             generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
 
@@ -238,6 +236,25 @@ class InfoGANTrainer(object):
             #     imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
             #     if isinstance(dist, Categorical):
             #         saver = tf.train.Saver({"gen_imgs": imgs})
+    def generating(self):
+        self.init_opt()
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+            # load model
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/ModelNet/ModelNet_2017_01_10_15_37_51/ModelNet_2017_01_10_15_37_51_1000.ckpt.meta'
+            saver = tf.train.Saver()
+            new_saver = tf.train.import_meta_graph(model_name)
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/ModelNet/ModelNet_2017_01_10_15_37_51/ModelNet_2017_01_10_15_37_51_1000.ckpt')
+            #
+            # x, _ = self.dataset.train.next_batch(self.batch_size)
+            # feed_dict = {self.input_tensor: x}
+            # log_vars = [x for _, x in self.log_vars]
+            # log_vals = sess.run(log_vars, feed_dict)[1:]
+            self.visualize_all_factors()
+            from infogan.misc.test_saved_model3d import plot_gen
+            imgs = self.imgs.eval()
+        # plot_gen(imgs)
+        np.save('imgs',imgs)
 
     def train(self):
 
@@ -256,7 +273,6 @@ class InfoGANTrainer(object):
             summary_writer = tf.summary.FileWriter(self.log_dir, sess.graph)
 
             saver = tf.train.Saver()
-            # saver_imgs = tf.train.Saver({"my_imgs": self.imgs})
 
             counter = 0
 
