@@ -51,22 +51,24 @@ class InfoGANTrainer(object):
         with pt.defaults_scope(phase=pt.Phase.train):
             z_var = self.model.latent_dist.sample_prior(self.batch_size)
             fake_x, _ = self.model.generate(z_var)
-            real_d, _, _, _ = self.model.discriminate(input_tensor)
+            real_d, _, real_reg_z_dist_info, _ = self.model.discriminate(input_tensor)
             fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
 
-            prediction = self.model.disc_reg_dist_info(fake_reg_z_dist_info)['id_0_prob']
-            classifier_loss = -tf.reduce_sum(input_label * tf.log(prediction+TINY))
 
             reg_z = self.model.reg_z(z_var)
 
             # discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(4. - fake_d + TINY)) # Modified by Hope, since maximum cross entropy for ten nodes is larger
             # generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
             discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY))
-            generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY)) + classifier_loss*0.01
+            generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
 
-            self.log_vars.append(("classifier_loss", tf.reduce_mean(classifier_loss)))
             self.log_vars.append(("discriminator_loss", tf.reduce_mean(discriminator_loss )))
             self.log_vars.append(("generator_loss", tf.reduce_mean(generator_loss )))
+
+            prediction = self.model.disc_reg_dist_info(real_reg_z_dist_info)['id_0_prob']
+            classifier_loss = -tf.reduce_mean(input_label * tf.log(prediction+TINY))
+            generator_loss += classifier_loss * 5
+            self.log_vars.append(("classifier_loss", classifier_loss))
 
             mi_est = tf.constant(0.)
             cross_ent = tf.constant(0.)
@@ -126,6 +128,9 @@ class InfoGANTrainer(object):
 
             generator_optimizer = tf.train.AdamOptimizer(self.generator_learning_rate, beta1=0.5)
             self.generator_trainer = pt.apply_optimizer(generator_optimizer, losses=[generator_loss], var_list=g_vars)
+
+            classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+            self.classifer_trainer = pt.apply_optimizer(classifer_optimizer, losses=[classifier_loss], var_list=d_vars)
 
             for k, v in self.log_vars:
                 # tf.scalar_summary(k, v)
@@ -237,6 +242,12 @@ class InfoGANTrainer(object):
             log_vars = [x for _, x in self.log_vars]
             log_keys = [x for x, _ in self.log_vars]
 
+            for epoch in range(20):
+                for i in range(self.updates_per_epoch):
+                    x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                    feed_dict = {self.input_tensor: x, self.input_label: y}
+                    sess.run(self.classifer_trainer, feed_dict)
+
             for epoch in range(self.max_epoch):
                 widgets = ["epoch #%d|" % epoch, Percentage(), Bar(), ETA()]
                 pbar = ProgressBar(maxval=self.updates_per_epoch, widgets=widgets)
@@ -248,7 +259,8 @@ class InfoGANTrainer(object):
                     x, y = self.dataset.supervised_train.next_batch(self.batch_size)
                     feed_dict = {self.input_tensor: x, self.input_label: y}
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
-                    sess.run(self.generator_trainer, feed_dict)
+                    for i in range(1):
+                        sess.run(self.generator_trainer, feed_dict)
                     all_log_vals.append(log_vals)
                     counter += 1
 
