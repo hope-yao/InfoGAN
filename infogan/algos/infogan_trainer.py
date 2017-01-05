@@ -23,6 +23,8 @@ class InfoGANTrainer(object):
                  info_reg_coeff=1.0,
                  discriminator_learning_rate=2e-4,
                  generator_learning_rate=2e-4,
+                 has_classifier = False,
+                 pretrain_classifier = False,
                  ):
         """
         :type model: RegularizedGAN
@@ -43,8 +45,14 @@ class InfoGANTrainer(object):
         self.generator_trainer = None
         self.input_tensor = None
         self.log_vars = []
+        self.has_classifier = has_classifier
+        if self.has_classifier:
+            self.pretrain_classifier = pretrain_classifier
+        else:
+            self.pretrain_classifier = False
 
     def init_opt(self):
+
         self.input_tensor = input_tensor = tf.placeholder(tf.float32, [self.batch_size, self.dataset.image_dim])
         self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 10]) # 10 different classes
 
@@ -65,10 +73,16 @@ class InfoGANTrainer(object):
             self.log_vars.append(("discriminator_loss", tf.reduce_mean(discriminator_loss )))
             self.log_vars.append(("generator_loss", tf.reduce_mean(generator_loss )))
 
-            prediction = self.model.disc_reg_dist_info(real_reg_z_dist_info)['id_0_prob']
-            classifier_loss = -tf.reduce_mean(input_label * tf.log(prediction+TINY))
-            generator_loss += classifier_loss * 5
-            self.log_vars.append(("classifier_loss", classifier_loss))
+            if self.has_classifier:
+                prediction = self.model.disc_reg_dist_info(real_reg_z_dist_info)['id_0_prob']
+                classifier_loss = -tf.reduce_mean(input_label * tf.log(prediction+TINY))
+                # classifier_loss =  -tf.reduce_mean(tf.reduce_sum(input_label * tf.log(prediction+TINY),1)) #This is the actual value
+                generator_loss += classifier_loss * 5
+                self.log_vars.append(("classifier_loss", classifier_loss))
+                classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+                all_vars = tf.trainable_variables()
+                d_vars = [var for var in all_vars if var.name.startswith('d_')]
+                self.classifer_trainer = pt.apply_optimizer(classifer_optimizer, losses=[classifier_loss], var_list=d_vars)
 
             mi_est = tf.constant(0.)
             cross_ent = tf.constant(0.)
@@ -128,9 +142,6 @@ class InfoGANTrainer(object):
 
             generator_optimizer = tf.train.AdamOptimizer(self.generator_learning_rate, beta1=0.5)
             self.generator_trainer = pt.apply_optimizer(generator_optimizer, losses=[generator_loss], var_list=g_vars)
-
-            classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
-            self.classifer_trainer = pt.apply_optimizer(classifer_optimizer, losses=[classifier_loss], var_list=d_vars)
 
             for k, v in self.log_vars:
                 # tf.scalar_summary(k, v)
@@ -242,11 +253,12 @@ class InfoGANTrainer(object):
             log_vars = [x for _, x in self.log_vars]
             log_keys = [x for x, _ in self.log_vars]
 
-            for epoch in range(20):
-                for i in range(self.updates_per_epoch):
-                    x, y = self.dataset.supervised_train.next_batch(self.batch_size)
-                    feed_dict = {self.input_tensor: x, self.input_label: y}
-                    sess.run(self.classifer_trainer, feed_dict)
+            if self.pretrain_classifier:
+                for epoch in range(20):
+                    for i in range(self.updates_per_epoch):
+                        x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                        feed_dict = {self.input_tensor: x, self.input_label: y}
+                        sess.run(self.classifer_trainer, feed_dict)
 
             for epoch in range(self.max_epoch):
                 widgets = ["epoch #%d|" % epoch, Percentage(), Bar(), ETA()]

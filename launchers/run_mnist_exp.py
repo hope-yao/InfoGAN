@@ -14,7 +14,7 @@ import datetime
 
 if __name__ == "__main__":
 
-    network_type = "mnist"
+    network_type = "ModelNet"
     switch_categorical_label = True # Modified by Hope, for supervised learning
 
     now = datetime.datetime.now(dateutil.tz.tzlocal())
@@ -68,6 +68,8 @@ if __name__ == "__main__":
         info_reg_coeff=1.0,
         generator_learning_rate=1e-3,
         discriminator_learning_rate=2e-4,
+        has_classifier = False,
+        pretrain_classifier = False,
     )
 
     algo.train()
