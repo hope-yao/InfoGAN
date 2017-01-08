@@ -19,7 +19,7 @@ class InfoGANTrainer(object):
                  checkpoint_dir="ckt",
                  max_epoch=100,
                  updates_per_epoch=100,
-                 snapshot_interval=10000,
+                 snapshot_interval=500,
                  info_reg_coeff=1.0,
                  discriminator_learning_rate=2e-4,
                  generator_learning_rate=2e-4,
@@ -171,6 +171,8 @@ class InfoGANTrainer(object):
         offset = 0
         for dist_idx, dist in enumerate(self.model.reg_latent_dist.dists):
             if isinstance(dist, Gaussian):
+                if self.model.network_type == "ModelNet": #don't need this data for modelnet
+                    continue
                 assert dist.dim == 1, "Only dim=1 is currently supported"
                 c_vals = []
                 for idx in xrange(10):
@@ -190,6 +192,8 @@ class InfoGANTrainer(object):
                 cur_cat[:, offset:offset+dist.dim] = lookup[cat_ids]
                 offset += dist.dim
             elif isinstance(dist, Bernoulli):
+                if self.model.network_type == "ModelNet":
+                    continue
                 assert dist.dim == 1, "Only dim=1 is currently supported"
                 lookup = np.eye(dist.dim, dtype=np.float32)
                 cat_ids = []
@@ -218,17 +222,22 @@ class InfoGANTrainer(object):
             img_var = tf.reshape(img_var, [self.batch_size] + list(self.dataset.image_shape))
             img_var = img_var[:rows * rows, :, :, :]
             imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
-            stacked_img = []
-            for row in xrange(rows):
-                row_img = []
-                for col in xrange(rows):
-                    row_img.append(imgs[row, col, :, :, :])
-                stacked_img.append(tf.concat(1, row_img))
-            imgs = tf.concat(0, stacked_img)
-            imgs = tf.expand_dims(imgs, 0)
-            if self.model.network_type == "mnist":
-                tf.summary.image("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs) # Hope: this should be changed into 3D
 
+            if self.model.network_type == "mnist":
+                stacked_img = []
+                for row in xrange(rows):
+                    row_img = []
+                    for col in xrange(rows):
+                        row_img.append(imgs[row, col, :, :, :])
+                    stacked_img.append(tf.concat(1, row_img))
+                imgs = tf.concat(0, stacked_img)
+                imgs = tf.expand_dims(imgs, 0)
+                tf.summary.image("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs) # Hope: this should be changed into 3D
+            elif self.model.network_type == "ModelNet":
+                self.imgs = imgs
+            #     imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
+            #     if isinstance(dist, Categorical):
+            #         saver = tf.train.Saver({"gen_imgs": imgs})
 
     def train(self):
 
@@ -247,6 +256,7 @@ class InfoGANTrainer(object):
             summary_writer = tf.summary.FileWriter(self.log_dir, sess.graph)
 
             saver = tf.train.Saver()
+            # saver_imgs = tf.train.Saver({"my_imgs": self.imgs})
 
             counter = 0
 
@@ -280,6 +290,8 @@ class InfoGANTrainer(object):
                         snapshot_name = "%s_%s" % (self.exp_name, str(counter))
                         fn = saver.save(sess, "%s/%s.ckpt" % (self.checkpoint_dir, snapshot_name))
                         print("Model saved in file: %s" % fn)
+                # img_path = saver_imgs.save(sess, "imgs.ckpt")
+                # print("Generated images saved in file: %s" % img_path)
 
                 x, y = self.dataset.supervised_train.next_batch(self.batch_size)
 
