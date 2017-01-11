@@ -135,7 +135,7 @@ class ModelNet10(object):
         self.train = DataSet(train_images, train_labels, dtype=dtype, reshape=reshape)
         self.validation = DataSet(validation_images, validation_labels, dtype=dtype, reshape=reshape)
         self.test = DataSet(test_images, test_labels, dtype=dtype, reshape=reshape)
-
+ 
         # make sure that each type of digits have exactly 10 samples
         sup_images = []
         sup_labels = []
