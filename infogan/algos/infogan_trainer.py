@@ -54,7 +54,8 @@ class InfoGANTrainer(object):
     def init_opt(self):
 
         self.input_tensor = input_tensor = tf.placeholder(tf.float32, [self.batch_size, self.dataset.image_dim])
-        self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 10]) # 10 different classes
+        if self.has_classifier:
+            self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 10]) # 10 different classes
 
         with pt.defaults_scope(phase=pt.Phase.train):
             z_var = self.model.latent_dist.sample_prior(self.batch_size)
@@ -294,8 +295,10 @@ class InfoGANTrainer(object):
                 all_log_vals = []
                 for i in range(self.updates_per_epoch):
                     pbar.update(i)
-                    x, y = self.dataset.supervised_train.next_batch(self.batch_size)
-                    feed_dict = {self.input_tensor: x, self.input_label: y}
+                    x, _ = self.dataset.train.next_batch(self.batch_size)
+                    feed_dict = {self.input_tensor: x}
+                    # x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                    # feed_dict = {self.input_tensor: x, self.input_label: y}
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
                     for i in range(1):
                         sess.run(self.generator_trainer, feed_dict)
@@ -309,9 +312,11 @@ class InfoGANTrainer(object):
                 # img_path = saver_imgs.save(sess, "imgs.ckpt")
                 # print("Generated images saved in file: %s" % img_path)
 
-                x, y = self.dataset.supervised_train.next_batch(self.batch_size)
-
-                summary_str = sess.run(summary_op, {self.input_tensor: x, self.input_label: y})
+                # x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                # feed_dict =  {self.input_tensor: x, self.input_label: y}
+                x, _ = self.dataset.train.next_batch(self.batch_size)
+                feed_dict = {self.input_tensor: x}
+                summary_str = sess.run(summary_op, feed_dict)
                 summary_writer.add_summary(summary_str, counter)
 
                 avg_log_vals = np.mean(np.array(all_log_vals), axis=0)

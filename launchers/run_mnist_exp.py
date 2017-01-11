@@ -14,7 +14,7 @@ import datetime
 
 if __name__ == "__main__":
 
-    network_type = "mnist"
+    network_type = "ModelNet"
     switch_categorical_label = True # Modified by Hope, for supervised learning
 
     now = datetime.datetime.now(dateutil.tz.tzlocal())
