@@ -4,7 +4,7 @@ from infogan.misc.distributions import Uniform, Categorical, Gaussian, MeanBerno
 
 import tensorflow as tf
 import os
-from infogan.misc.datasets import MnistDataset, ModelNet10
+from infogan.misc.datasets import MnistDataset, ModelNet10, crossmodel
 from infogan.models.regularized_gan import RegularizedGAN
 from infogan.algos.infogan_trainer import InfoGANTrainer
 from infogan.misc.utils import mkdir_p
@@ -21,7 +21,7 @@ if __name__ == "__main__":
     root_checkpoint_dir = "ckt/ModelNet"
     batch_size = 128
     updates_per_epoch = 100
-    max_epoch = 50
+    max_epoch = 500
 
     exp_name = "ModelNet_%s" % timestamp
 
@@ -31,12 +31,14 @@ if __name__ == "__main__":
     mkdir_p(log_dir)
     mkdir_p(checkpoint_dir)
 
-    network_type = "MNIST"
+    network_type = "crossmodel"
 
     if network_type == "MNIST":
-        dataset = MnistDataset()
+        dataset = MnistDataset(False)
     elif network_type == "ModelNet":
-        dataset = ModelNet10()
+        dataset = ModelNet10(False)
+    elif network_type == "crossmodel":
+        dataset = crossmodel(False)
     else:
         raise NotImplementedError
 
