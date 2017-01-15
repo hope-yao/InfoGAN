@@ -68,7 +68,7 @@ class RegularizedGAN(object):
                      # custom_deconv2d([0] + list(image_shape), k_h=4, k_w=4).
                      custom_deconv3d([0] + list(image_shape), k_h=4, k_w=4, k_d=4).
                      flatten())
-        elif network_type == "MNIST" or network_type == "crossmodel":
+        elif network_type == "MNIST" or network_type == "crossmodel" or network_type == "rec_crs":
             with tf.variable_scope("d_net"):
                 shared_template = \
                     (pt.template("input").
@@ -117,7 +117,7 @@ class RegularizedGAN(object):
     def generate(self, z_var):
         x_dist_flat = self.generator_template.construct(input=z_var)
         x_dist_info = self.output_dist.activate_dist(x_dist_flat)
-        return self.output_dist.sample(x_dist_info), x_dist_info
+        return self.output_dist.sample(x_dist_info), x_dist_info, x_dist_flat
 
     def disc_reg_z(self, reg_z_var):
         ret = []

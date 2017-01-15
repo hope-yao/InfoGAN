@@ -4,7 +4,7 @@ from infogan.misc.distributions import Uniform, Categorical, Gaussian, MeanBerno
 
 import tensorflow as tf
 import os
-from infogan.misc.datasets import MnistDataset, ModelNet10, crossmodel
+from infogan.misc.datasets import MnistDataset, ModelNet10, crossmodel, rec_crs
 from infogan.models.regularized_gan import RegularizedGAN
 from infogan.algos.infogan_trainer import InfoGANTrainer
 from infogan.misc.utils import mkdir_p
@@ -17,8 +17,8 @@ if __name__ == "__main__":
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
 
-    root_log_dir = "logs/ModelNet"
-    root_checkpoint_dir = "ckt/ModelNet"
+    root_log_dir = "logs/rec_crs"
+    root_checkpoint_dir = "ckt/rec_crs"
     batch_size = 128
     updates_per_epoch = 100
     max_epoch = 500
@@ -31,14 +31,16 @@ if __name__ == "__main__":
     mkdir_p(log_dir)
     mkdir_p(checkpoint_dir)
 
-    network_type = "crossmodel"
+    network_type = "rec_crs"
 
     if network_type == "MNIST":
         dataset = MnistDataset(False)
     elif network_type == "ModelNet":
         dataset = ModelNet10(False)
-    elif network_type == "crossmodel":
+    elif network_type == "crossmodel":  # will result in nan for no reason....
         dataset = crossmodel(False)
+    elif network_type == "rec_crs":
+        dataset = rec_crs(False)
     else:
         raise NotImplementedError
 
@@ -71,4 +73,5 @@ if __name__ == "__main__":
         discriminator_learning_rate=2e-4,
     )
 
+    # algo.testing()
     algo.train()

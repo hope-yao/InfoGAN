@@ -4,10 +4,14 @@ import os
 import numpy as np
 
 
-class Dataset(object):
-    def __init__(self, images, labels=None):
+class supervised_Dataset(object):
+    def __init__(self, images, labels=None, switch_categorical_label=False ):
         self._images = images.reshape(images.shape[0], -1)
-        self._labels = labels
+        self._switch_categorical_label = switch_categorical_label
+        if switch_categorical_label:
+            self._labels = self.convert_label(labels) # Modified by Hope
+        else:
+            self._labels = labels
         self._epochs_completed = -1
         self._num_examples = images.shape[0]
         # shuffle on first run
@@ -28,6 +32,14 @@ class Dataset(object):
     @property
     def epochs_completed(self):
         return self._epochs_completed
+
+    def convert_label(self, labels):
+        categorical_labels = np.zeros((labels.shape[0], 10))
+        for idx, label in enumerate(labels):
+            cat_label = np.zeros(10)
+            cat_label[label] = 1
+            categorical_labels[idx] = cat_label
+        return categorical_labels
 
     def next_batch(self, batch_size):
         """Return the next `batch_size` examples from this data set."""
@@ -50,11 +62,14 @@ class Dataset(object):
         if self._labels is None:
             return self._images[start:end], None
         else:
-            return self._images[start:end], self._labels[start:end]
+            if self._switch_categorical_label:
+                return self._images[start:end], self._labels[start:end,:]
+            else:
+                return self._images[start:end], self._labels[start:end]
 
 
 class MnistDataset(object):
-    def __init__(self):
+    def __init__(self,switch_categorical_label):
         data_directory = "MNIST"
         if not os.path.exists(data_directory):
             os.makedirs(data_directory)
@@ -68,12 +83,13 @@ class MnistDataset(object):
         for cat in range(10):
             ids = np.where(self.train.labels == cat)[0]
             np.random.shuffle(ids)
-            sup_images.extend(self.train.images[ids[:10]])
-            sup_labels.extend(self.train.labels[ids[:10]])
+            sup_images.extend(self.train.images[ids])
+            sup_labels.extend(self.train.labels[ids])
         np.random.set_state(rnd_state)
-        self.supervised_train = Dataset(
+        self.supervised_train = supervised_Dataset(
             np.asarray(sup_images),
             np.asarray(sup_labels),
+            switch_categorical_label=switch_categorical_label
         )
         self.test = dataset.test
         self.validation = dataset.validation
@@ -88,7 +104,7 @@ class MnistDataset(object):
 
 
 class ModelNet10(object):
-    def __init__(self):
+    def __init__(self,switch_categorical_label):
         # data_directory = "ModelNet10"
         from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
         from tensorflow.python.framework import dtypes
@@ -128,12 +144,13 @@ class ModelNet10(object):
         for cat in range(10):
             ids = np.where(self.train.labels == cat)[0]
             np.random.shuffle(ids)
-            sup_images.extend(self.train.images[ids[:10]])
-            sup_labels.extend(self.train.labels[ids[:10]])
+            sup_images.extend(self.train.images[ids])
+            sup_labels.extend(self.train.labels[ids])
         np.random.set_state(rnd_state)
-        self.supervised_train = Dataset(
+        self.supervised_train = supervised_Dataset(
             np.asarray(sup_images),
             np.asarray(sup_labels),
+            switch_categorical_label = switch_categorical_label
         )
         self.image_dim = 32 * 32 * 32
         self.image_shape = (32, 32, 32, 1)
@@ -143,3 +160,139 @@ class ModelNet10(object):
 
     def inverse_transform(self, data):
         return data
+
+
+class crossmodel(object):
+    def __init__(self,switch_categorical_label):
+        import scipy.io as io
+        train_images1 = io.loadmat('./crossmodel/data1_th.mat')['final_1']
+        train_images2 = io.loadmat('./crossmodel/data2_th.mat')['final_2']
+        train_images3 = io.loadmat('./crossmodel/data3_th.mat')['final_3']
+        # train_images1 = data1.reshape(data1.shape[0], 28, 28)
+        # train_images2 = data2.reshape(data2.shape[0], 28, 28)
+        # train_images3 = data3.reshape(data3.shape[0], 28, 28)
+        images = np.concatenate([train_images1, train_images2, train_images3])
+
+        # data_directory = "ModelNet10"
+        from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
+        from tensorflow.python.framework import dtypes
+        dtype = dtypes.float32
+        reshape = False
+
+        # from fuel.datasets.hdf5 import H5PYDataset
+        # train_set = H5PYDataset('ModelNet10/ModelNet10.hdf5', which_sets=('train',))
+        # handle = train_set.open()
+        # train_data = train_set.get_data(handle, slice(0, train_set.num_examples))
+        # train_images = train_data[0]
+        # images = images.reshape(images.shape[0],28, 28)
+        labels = [0]*train_images1.shape[0] +[1]*train_images2.shape[0]+[2]*train_images3.shape[0]
+
+        from random import sample
+        ttnum = len(images)
+        trainval_num = int(0.9*ttnum)
+        trainval_num_idx = sample(range(ttnum), trainval_num )
+
+        test_images = np.delete(images, trainval_num_idx, 0)
+        test_labels = np.delete(labels, trainval_num_idx, 0)
+        trainval_images = images[trainval_num_idx]
+        trainval_labels = labels[trainval_num_idx]
+
+        train_num_idx = sample(range(trainval_num), int(0.8*trainval_num))
+        validation_images = np.delete(trainval_images, train_num_idx, 0)
+        validation_labels = np.delete(trainval_labels, train_num_idx, 0)
+        train_images = trainval_images[train_num_idx]
+        train_labels = trainval_labels[train_num_idx]
+
+        self.train = DataSet(train_images, train_labels, dtype=dtype, reshape=reshape)
+        self.validation = DataSet(validation_images, validation_labels, dtype=dtype, reshape=reshape)
+        self.test = DataSet(test_images, test_labels, dtype=dtype, reshape=reshape)
+
+        # make sure that each type of digits have exactly 10 samples
+        sup_images = []
+        sup_labels = []
+        rnd_state = np.random.get_state()
+        np.random.seed(0)
+        for cat in range(10):
+            ids = np.where(self.train.labels == cat)[0]
+            np.random.shuffle(ids)
+            sup_images.extend(self.train.images[ids])
+            sup_labels.extend(self.train.labels[ids])
+        np.random.set_state(rnd_state)
+        self.supervised_train = supervised_Dataset(
+            np.asarray(sup_images),
+            np.asarray(sup_labels),
+            switch_categorical_label = switch_categorical_label
+        )
+        self.image_dim = 28* 28
+        self.image_shape = (28, 28, 1)
+
+    def transform(self, data):
+        return data
+
+    def inverse_transform(self, data):
+        return data
+
+
+class rec_crs(object):
+    def __init__(self,switch_categorical_label):
+
+        data = np.load('rec_crs.npy')
+        data1 = data.item()['rect_img']
+        data2 = data.item()['cross_img']
+        label1 = data.item()['rect_label']
+        label2 = data.item()['cross_label']
+        images = np.concatenate([data1, data2])
+        labels = np.concatenate([label1, label2])
+        images = images.reshape(images.shape[0],28,28,1)
+
+        from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
+        from tensorflow.python.framework import dtypes
+        dtype = dtypes.float32
+        reshape = True
+
+
+        from random import sample
+        ttnum = len(images)
+        trainval_num = int(0.9*ttnum)
+        trainval_num_idx = sample(range(ttnum), trainval_num )
+
+        test_images = np.delete(images, trainval_num_idx, 0)
+        test_labels = np.delete(labels, trainval_num_idx, 0)
+        trainval_images = images[trainval_num_idx]
+        trainval_labels = labels[trainval_num_idx]
+
+        train_num_idx = sample(range(trainval_num), int(0.8*trainval_num))
+        validation_images = np.delete(trainval_images, train_num_idx, 0)
+        validation_labels = np.delete(trainval_labels, train_num_idx, 0)
+        train_images = trainval_images[train_num_idx]
+        train_labels = trainval_labels[train_num_idx]
+
+        self.train = DataSet(train_images, train_labels, dtype=dtype, reshape=reshape)
+        self.validation = DataSet(validation_images, validation_labels, dtype=dtype, reshape=reshape)
+        self.test = DataSet(test_images, test_labels, dtype=dtype, reshape=reshape)
+
+        # make sure that each type of digits have exactly 10 samples
+        sup_images = []
+        sup_labels = []
+        rnd_state = np.random.get_state()
+        np.random.seed(0)
+        for cat in range(10):
+            ids = np.where(self.train.labels == cat)[0]
+            np.random.shuffle(ids)
+            sup_images.extend(self.train.images[ids])
+            sup_labels.extend(self.train.labels[ids])
+        np.random.set_state(rnd_state)
+        self.supervised_train = supervised_Dataset(
+            np.asarray(sup_images),
+            np.asarray(sup_labels),
+            switch_categorical_label = switch_categorical_label
+        )
+        self.image_dim = 28* 28
+        self.image_shape = (28, 28, 1)
+
+    def transform(self, data):
+        return data
+
+    def inverse_transform(self, data):
+        return data
+

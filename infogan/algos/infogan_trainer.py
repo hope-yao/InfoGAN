@@ -49,7 +49,7 @@ class InfoGANTrainer(object):
 
         with pt.defaults_scope(phase=pt.Phase.train):
             z_var = self.model.latent_dist.sample_prior(self.batch_size)
-            fake_x, _ = self.model.generate(z_var)
+            fake_x, _,x_dist_flat  = self.model.generate(z_var)
             real_d, _, _, _ = self.model.discriminate(input_tensor)
             fake_d, _, fake_reg_z_dist_info, _ = self.model.discriminate(fake_x)
 
@@ -57,6 +57,9 @@ class InfoGANTrainer(object):
 
             discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY))
             generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
+
+            self.log_vars.append(("test_z", tf.reduce_mean(x_dist_flat)))
+            self.log_vars.append(("test_fakex", tf.reduce_mean(fake_x)))
 
             self.log_vars.append(("discriminator_loss", discriminator_loss))
             self.log_vars.append(("generator_loss", generator_loss))
@@ -181,7 +184,7 @@ class InfoGANTrainer(object):
                 raise NotImplementedError
             z_var = tf.constant(np.concatenate([fixed_noncat, cur_cat], axis=1))
 
-            _, x_dist_info = self.model.generate(z_var)
+            _, x_dist_info, _ = self.model.generate(z_var)
 
             # just take the mean image
             if isinstance(self.model.output_dist, Bernoulli):
@@ -271,7 +274,7 @@ class InfoGANTrainer(object):
                     raise NotImplementedError
                 z_var = tf.constant(np.concatenate([fixed_noncat, cur_cat], axis=1))
 
-                _, x_dist_info = self.model.generate(z_var)
+                _, x_dist_info, _ = self.model.generate(z_var)
 
                 # just take the mean image
                 if isinstance(self.model.output_dist, Bernoulli):
@@ -355,3 +358,19 @@ class InfoGANTrainer(object):
                 sys.stdout.flush()
                 if np.any(np.isnan(avg_log_vals)):
                     raise ValueError("NaN detected!")
+
+
+    def testing(self):
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+            # load model
+            model_name = '/home/hope-yao/Documents/InfoGAN/wrong_crsrect.ckpt.meta'
+            # saver = tf.train.Saver()
+            new_saver = tf.train.import_meta_graph(model_name)
+            new_saver.restore(sess,'/home/hope-yao/Documents/InfoGAN/wrong_crsrect.ckpt')
+
+            zz = tf.placeholder(tf.float32, [self.batch_size, 74])
+            a,b,c = self.model.generate(zz)
+
+            zzz = np.zeros((128,74))
+            cc = sess.run(c , {zz: zzz})
