@@ -126,6 +126,7 @@ class InfoGANTrainer(object):
         with pt.defaults_scope(phase=pt.Phase.test):
             with tf.variable_scope("model", reuse=True) as scope:
                 self.visualize_all_factors()
+                # print('testing doning nothing...')
 
     def visualize_all_factors(self):
         with tf.Session():
@@ -235,6 +236,12 @@ class InfoGANTrainer(object):
                     x, _ = self.dataset.train.next_batch(self.batch_size)
                     feed_dict = {self.input_tensor: x}
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
+                    sess.run(self.generator_trainer, feed_dict)
+                    sess.run(self.generator_trainer, feed_dict)
+                    sess.run(self.generator_trainer, feed_dict)
+                    sess.run(self.generator_trainer, feed_dict)
+                    sess.run(self.generator_trainer, feed_dict)
+                    sess.run(self.generator_trainer, feed_dict)
                     sess.run(self.generator_trainer, feed_dict)
                     all_log_vals.append(log_vals)
                     counter += 1
