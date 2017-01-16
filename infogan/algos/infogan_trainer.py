@@ -49,7 +49,7 @@ class InfoGANTrainer(object):
 
         with pt.defaults_scope(phase=pt.Phase.train):
             z_var = self.model.latent_dist.sample_prior(self.batch_size)
-            fake_x, _ = self.model.generate(z_var)
+            fake_x, _,x_dist_flat  = self.model.generate(z_var)
             real_d, _, _, _ = self.model.discriminate(input_tensor)
             fake_d, _, fake_reg_z_dist_info, _ = self.model.discriminate(fake_x)
 
@@ -57,6 +57,9 @@ class InfoGANTrainer(object):
 
             discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY))
             generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
+
+            self.log_vars.append(("test_z", tf.reduce_mean(x_dist_flat)))
+            self.log_vars.append(("test_fakex", tf.reduce_mean(fake_x)))
 
             self.log_vars.append(("discriminator_loss", discriminator_loss))
             self.log_vars.append(("generator_loss", generator_loss))
@@ -121,6 +124,7 @@ class InfoGANTrainer(object):
             self.generator_trainer = pt.apply_optimizer(generator_optimizer, losses=[generator_loss], var_list=g_vars)
 
             for k, v in self.log_vars:
+                # tf.scalar_summary(k, v)
                 tf.summary.scalar(k, v)
 
         with pt.defaults_scope(phase=pt.Phase.test):
@@ -181,7 +185,7 @@ class InfoGANTrainer(object):
                 raise NotImplementedError
             z_var = tf.constant(np.concatenate([fixed_noncat, cur_cat], axis=1))
 
-            _, x_dist_info = self.model.generate(z_var)
+            _, x_dist_info, _ = self.model.generate(z_var)
 
             # just take the mean image
             if isinstance(self.model.output_dist, Bernoulli):
@@ -203,19 +207,115 @@ class InfoGANTrainer(object):
                 stacked_img.append(tf.concat(1, row_img))
             imgs = tf.concat(0, stacked_img)
             imgs = tf.expand_dims(imgs, 0)
-            tf.summary.image("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs)
+            # tf.image_summary("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs) # Hope: this should be changed into 3D
 
+    def generating(self):
+        self.init_opt()
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+            # load model
+            model_name = '/home/hope-yao/Documents/InfoGAN_result/InfoGAN_result_doi3/logs/ModelNet/ModelNet_2017_01_11_16_39_54/ModelNet_2017_01_11_16_39_54/ModelNet_2017_01_11_16_39_54_50000.ckpt.meta'
+            saver = tf.train.Saver()
+            new_saver = tf.train.import_meta_graph(model_name)
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN_result/InfoGAN_result_doi3/logs/ModelNet/ModelNet_2017_01_11_16_39_54/ModelNet_2017_01_11_16_39_54/ModelNet_2017_01_11_16_39_54_50000.ckpt')
+            #
+            # x, _ = self.dataset.train.next_batch(self.batch_size)
+            # feed_dict = {self.input_tensor: x}
+            # log_vars = [x for _, x in self.log_vars]
+            # log_vals = sess.run(log_vars, feed_dict)[1:]
+            with tf.Session():
+                fixed_noncat = np.concatenate([
+                    np.tile(
+                        self.model.nonreg_latent_dist.sample_prior(10).eval(),
+                        [10, 1]
+                    ),
+                    self.model.nonreg_latent_dist.sample_prior(self.batch_size - 100).eval(),
+                ], axis=0)
+                fixed_cat = np.concatenate([
+                    np.tile(
+                        self.model.reg_latent_dist.sample_prior(10).eval(),
+                        [10, 1]
+                    ),
+                    self.model.reg_latent_dist.sample_prior(self.batch_size - 100).eval(),
+                ], axis=0)
+
+            offset = 0
+            for dist_idx, dist in enumerate(self.model.reg_latent_dist.dists):
+                if isinstance(dist, Gaussian):
+                    assert dist.dim == 1, "Only dim=1 is currently supported"
+                    c_vals = []
+                    for idx in xrange(10):
+                        c_vals.extend([-1.0 + idx * 2.0 / 9] * 10)
+                    c_vals.extend([0.] * (self.batch_size - 100))
+                    vary_cat = np.asarray(c_vals, dtype=np.float32).reshape((-1, 1))
+                    cur_cat = np.copy(fixed_cat)
+                    cur_cat[:, offset:offset + 1] = vary_cat
+                    offset += 1
+                elif isinstance(dist, Categorical):
+                    lookup = np.eye(dist.dim, dtype=np.float32)
+                    cat_ids = []
+                    for idx in xrange(10):
+                        cat_ids.extend([idx] * 10)
+                    cat_ids.extend([0] * (self.batch_size - 100))
+                    cur_cat = np.copy(fixed_cat)
+                    cur_cat[:, offset:offset + dist.dim] = lookup[cat_ids]
+                    offset += dist.dim
+                elif isinstance(dist, Bernoulli):
+                    assert dist.dim == 1, "Only dim=1 is currently supported"
+                    lookup = np.eye(dist.dim, dtype=np.float32)
+                    cat_ids = []
+                    for idx in xrange(10):
+                        cat_ids.extend([int(idx / 5)] * 10)
+                    cat_ids.extend([0] * (self.batch_size - 100))
+                    cur_cat = np.copy(fixed_cat)
+                    cur_cat[:, offset:offset + dist.dim] = np.expand_dims(np.array(cat_ids), axis=-1)
+                    # import ipdb; ipdb.set_trace()
+                    offset += dist.dim
+                else:
+                    raise NotImplementedError
+                z_var = tf.constant(np.concatenate([fixed_noncat, cur_cat], axis=1))
+
+                _, x_dist_info, _ = self.model.generate(z_var)
+
+                # just take the mean image
+                if isinstance(self.model.output_dist, Bernoulli):
+                    img_var = x_dist_info["p"]
+                elif isinstance(self.model.output_dist, Gaussian):
+                    img_var = x_dist_info["mean"]
+                else:
+                    raise NotImplementedError
+                img_var = self.dataset.inverse_transform(img_var)
+                rows = 10
+                img_var = tf.reshape(img_var, [self.batch_size] + list(self.dataset.image_shape))
+                img_var = img_var[:rows * rows, :, :, :]
+                imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
+                stacked_img = []
+                for row in xrange(rows):
+                    row_img = []
+                    for col in xrange(rows):
+                        row_img.append(imgs[row, col, :, :, :])
+                    stacked_img.append(tf.concat(1, row_img))
+                imgs = tf.concat(0, stacked_img)
+                imgs = tf.expand_dims(imgs, 0)
+            from infogan.misc.test_saved_model3d import plot_gen
+            imgs = imgs.eval()
+        # plot_gen(imgs)
+        np.save('imgs',imgs)
 
     def train(self):
 
         self.init_opt()
 
         init = tf.initialize_all_variables()
+        # init = tf.global_variables_initializer
 
         with tf.Session() as sess:
             sess.run(init)
 
+            # summary_op = tf.merge_all_summaries()
             summary_op = tf.summary.merge_all()
+
+            # summary_writer = tf.train.SummaryWriter(self.log_dir, sess.graph)
             summary_writer = tf.summary.FileWriter(self.log_dir, sess.graph)
 
             saver = tf.train.Saver()
@@ -257,6 +357,7 @@ class InfoGANTrainer(object):
                 summary_writer.add_summary(summary_str, counter)
 
                 avg_log_vals = np.mean(np.array(all_log_vals), axis=0)
+                np.save('all_log_vals',np.asarray(all_log_vals))
                 log_dict = dict(zip(log_keys, avg_log_vals))
 
                 log_line = "; ".join("%s: %s" % (str(k), str(v)) for k, v in zip(log_keys, avg_log_vals))
@@ -264,3 +365,19 @@ class InfoGANTrainer(object):
                 sys.stdout.flush()
                 if np.any(np.isnan(avg_log_vals)):
                     raise ValueError("NaN detected!")
+
+
+    def testing(self):
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+            # load model
+            model_name = '/home/hope-yao/Documents/InfoGAN/wrong_crsrect.ckpt.meta'
+            # saver = tf.train.Saver()
+            new_saver = tf.train.import_meta_graph(model_name)
+            new_saver.restore(sess,'/home/hope-yao/Documents/InfoGAN/wrong_crsrect.ckpt')
+
+            zz = tf.placeholder(tf.float32, [self.batch_size, 74])
+            a,b,c = self.model.generate(zz)
+
+            zzz = np.zeros((128,74))
+            cc = sess.run(c , {zz: zzz})
