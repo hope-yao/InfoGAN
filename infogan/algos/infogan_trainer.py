@@ -19,7 +19,7 @@ class InfoGANTrainer(object):
                  checkpoint_dir="ckt",
                  max_epoch=100,
                  updates_per_epoch=100,
-                 snapshot_interval=500,
+                 snapshot_interval=10000,
                  info_reg_coeff=1.0,
                  discriminator_learning_rate=2e-4,
                  generator_learning_rate=2e-4,
@@ -242,10 +242,10 @@ class InfoGANTrainer(object):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/ModelNet/ModelNet_2017_01_10_15_37_51/ModelNet_2017_01_10_15_37_51_1000.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/ModelNet/ModelNet_2017_01_17_09_42_02/ModelNet_2017_01_17_09_42_02_10000.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/ModelNet/ModelNet_2017_01_10_15_37_51/ModelNet_2017_01_10_15_37_51_1000.ckpt')
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/ModelNet/ModelNet_2017_01_17_09_42_02/ModelNet_2017_01_17_09_42_02_10000.ckpt')
             #
             # x, _ = self.dataset.train.next_batch(self.batch_size)
             # feed_dict = {self.input_tensor: x}
@@ -300,7 +300,7 @@ class InfoGANTrainer(object):
                     # x, y = self.dataset.supervised_train.next_batch(self.batch_size)
                     # feed_dict = {self.input_tensor: x, self.input_label: y}
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
-                    for i in range(1):
+                    for i in range(5):
                         sess.run(self.generator_trainer, feed_dict)
                     all_log_vals.append(log_vals)
                     counter += 1
