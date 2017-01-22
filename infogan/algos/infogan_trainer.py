@@ -6,7 +6,7 @@ from progressbar import ETA, Bar, Percentage, ProgressBar
 from infogan.misc.distributions import Bernoulli, Gaussian, Categorical
 import sys
 
-TINY = 1e-8
+TINY = 2e-8
 
 
 class InfoGANTrainer(object):
@@ -151,78 +151,24 @@ class InfoGANTrainer(object):
                 self.visualize_all_factors()
 
     def visualize_all_factors(self):
-        with tf.Session():
-            fixed_noncat = np.concatenate([
-                np.tile(
-                    self.model.nonreg_latent_dist.sample_prior(10).eval(),
-                    [10, 1]
-                ),
-                self.model.nonreg_latent_dist.sample_prior(self.batch_size - 100).eval(),
-            ], axis=0)
-            fixed_cat = np.concatenate([
-                np.tile(
-                    self.model.reg_latent_dist.sample_prior(10).eval(),
-                    [10, 1]
-                ),
-                self.model.reg_latent_dist.sample_prior(self.batch_size - 100).eval(),
-            ], axis=0)
+        if self.model.network_type=='rec_crs':
+            with tf.Session():
+                z_var = []
+                for cat in [[1, 0], [0, 1], [1, 1], [0, 0]]:
+                    for nregidx in [0, 0.5, 1]:
+                        for contidx in range(0, 10, 1):
+                            cont = contidx / 10.
+                            z_var = z_var + [[nregidx] + cat + [cont]]
+                z_var = tf.constant(np.asarray(z_var, dtype=np.float32)[0:100])
 
-        offset = 0
-        for dist_idx, dist in enumerate(self.model.reg_latent_dist.dists):
-            if isinstance(dist, Gaussian):
-                if self.model.network_type == "ModelNet": #don't need this data for modelnet
-                    continue
-                assert dist.dim == 1, "Only dim=1 is currently supported"
-                c_vals = []
-                for idx in xrange(10):
-                    c_vals.extend([-1.0 + idx * 2.0 / 9] * 10)
-                c_vals.extend([0.] * (self.batch_size - 100))
-                vary_cat = np.asarray(c_vals, dtype=np.float32).reshape((-1, 1))
-                cur_cat = np.copy(fixed_cat)
-                cur_cat[:, offset:offset+1] = vary_cat
-                offset += 1
-            elif isinstance(dist, Categorical):
-                lookup = np.eye(dist.dim, dtype=np.float32)
-                cat_ids = []
-                for idx in xrange(10):
-                    cat_ids.extend([idx] * 10)
-                cat_ids.extend([0] * (self.batch_size - 100))
-                cur_cat = np.copy(fixed_cat)
-                cur_cat[:, offset:offset+dist.dim] = lookup[cat_ids]
-                offset += dist.dim
-            elif isinstance(dist, Bernoulli):
-                if self.model.network_type == "ModelNet":
-                    continue
-                assert dist.dim == 1, "Only dim=1 is currently supported"
-                lookup = np.eye(dist.dim, dtype=np.float32)
-                cat_ids = []
-                for idx in xrange(10):
-                    cat_ids.extend([int(idx / 5)] * 10)
-                cat_ids.extend([0] * (self.batch_size - 100))
-                cur_cat = np.copy(fixed_cat)
-                cur_cat[:, offset:offset+dist.dim] = np.expand_dims(np.array(cat_ids), axis=-1)
-                # import ipdb; ipdb.set_trace()
-                offset += dist.dim
-            else:
-                raise NotImplementedError
-            z_var = tf.constant(np.concatenate([fixed_noncat, cur_cat], axis=1))
-
-            _, x_dist_info = self.model.generate(z_var)
-
-            # just take the mean image
-            if isinstance(self.model.output_dist, Bernoulli):
+                _, x_dist_info = self.model.generate(z_var)
                 img_var = x_dist_info["p"]
-            elif isinstance(self.model.output_dist, Gaussian):
-                img_var = x_dist_info["mean"]
-            else:
-                raise NotImplementedError
-            img_var = self.dataset.inverse_transform(img_var)
-            rows = 10
-            img_var = tf.reshape(img_var, [self.batch_size] + list(self.dataset.image_shape))
-            img_var = img_var[:rows * rows, :, :, :]
-            imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
+                img_var = self.dataset.inverse_transform(img_var)
+                rows = 10
+                img_var = tf.reshape(img_var, [self.batch_size] + list(self.dataset.image_shape))
+                img_var = img_var[:rows * rows, :, :, :]
+                imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
 
-            if self.model.network_type == "mnist":
                 stacked_img = []
                 for row in xrange(rows):
                     row_img = []
@@ -231,21 +177,107 @@ class InfoGANTrainer(object):
                     stacked_img.append(tf.concat(1, row_img))
                 imgs = tf.concat(0, stacked_img)
                 imgs = tf.expand_dims(imgs, 0)
-                tf.summary.image("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs) # Hope: this should be changed into 3D
-            elif self.model.network_type == "ModelNet":
+                tf.summary.image("image__rectcrs",imgs)  # Hope: this should be changed into 3D
                 self.imgs = imgs
-            #     imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
-            #     if isinstance(dist, Categorical):
-            #         saver = tf.train.Saver({"gen_imgs": imgs})
+        else:
+            with tf.Session():
+                fixed_noncat = np.concatenate([
+                    np.tile(
+                        self.model.nonreg_latent_dist.sample_prior(10).eval(),
+                        [10, 1]
+                    ),
+                    self.model.nonreg_latent_dist.sample_prior(self.batch_size - 100).eval(),
+                ], axis=0)
+                fixed_cat = np.concatenate([
+                    np.tile(
+                        self.model.reg_latent_dist.sample_prior(10).eval(),
+                        [10, 1]
+                    ),
+                    self.model.reg_latent_dist.sample_prior(self.batch_size - 100).eval(),
+                ], axis=0)
+
+            offset = 0
+            for dist_idx, dist in enumerate(self.model.reg_latent_dist.dists):
+                if isinstance(dist, Gaussian):
+                    if self.model.network_type == "ModelNet": #don't need this data for modelnet
+                        continue
+                    assert dist.dim == 1, "Only dim=1 is currently supported"
+                    c_vals = []
+                    for idx in xrange(10):
+                        c_vals.extend([-1.0 + idx * 2.0 / 9] * 10)
+                    c_vals.extend([0.] * (self.batch_size - 100))
+                    vary_cat = np.asarray(c_vals, dtype=np.float32).reshape((-1, 1))
+                    cur_cat = np.copy(fixed_cat)
+                    cur_cat[:, offset:offset+1] = vary_cat
+                    offset += 1
+                elif isinstance(dist, Categorical):
+                    lookup = np.eye(dist.dim, dtype=np.float32)
+                    cat_ids = []
+                    for idx in xrange(10):
+                        cat_ids.extend([idx] * 10)
+                    cat_ids.extend([0] * (self.batch_size - 100))
+                    cur_cat = np.copy(fixed_cat)
+                    cur_cat[:, offset:offset+dist.dim] = lookup[cat_ids]
+                    offset += dist.dim
+                elif isinstance(dist, Bernoulli):
+                    if self.model.network_type == "ModelNet":
+                        continue
+                    assert dist.dim == 1, "Only dim=1 is currently supported"
+                    lookup = np.eye(dist.dim, dtype=np.float32)
+                    cat_ids = []
+                    for idx in xrange(10):
+                        cat_ids.extend([int(idx / 5)] * 10)
+                    cat_ids.extend([0] * (self.batch_size - 100))
+                    cur_cat = np.copy(fixed_cat)
+                    cur_cat[:, offset:offset+dist.dim] = np.expand_dims(np.array(cat_ids), axis=-1)
+                    # import ipdb; ipdb.set_trace()
+                    offset += dist.dim
+                else:
+                    raise NotImplementedError
+                z_var = tf.constant(np.concatenate([fixed_noncat, cur_cat], axis=1))
+
+                _, x_dist_info = self.model.generate(z_var)
+
+                # just take the mean image
+                if isinstance(self.model.output_dist, Bernoulli):
+                    img_var = x_dist_info["p"]
+                elif isinstance(self.model.output_dist, Gaussian):
+                    img_var = x_dist_info["mean"]
+                else:
+                    raise NotImplementedError
+                img_var = self.dataset.inverse_transform(img_var)
+                rows = 10
+                img_var = tf.reshape(img_var, [self.batch_size] + list(self.dataset.image_shape))
+                img_var = img_var[:rows * rows, :, :, :]
+                imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
+
+                if self.model.network_type == "mnist":
+                    stacked_img = []
+                    for row in xrange(rows):
+                        row_img = []
+                        for col in xrange(rows):
+                            row_img.append(imgs[row, col, :, :, :])
+                        stacked_img.append(tf.concat(1, row_img))
+                    imgs = tf.concat(0, stacked_img)
+                    imgs = tf.expand_dims(imgs, 0)
+                    tf.summary.image("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs) # Hope: this should be changed into 3D
+                    self.imgs = imgs
+                elif self.model.network_type == "ModelNet":
+                    self.imgs = imgs
+                #     imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
+                #     if isinstance(dist, Categorical):
+                #         saver = tf.train.Saver({"gen_imgs": imgs})
+
+
     def generating(self):
         self.init_opt()
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/ModelNet/ModelNet_2017_01_17_09_42_02/ModelNet_2017_01_17_09_42_02_10000.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_19_13_59_00/rec_crs_2017_01_19_13_59_00_50000.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/ModelNet/ModelNet_2017_01_17_09_42_02/ModelNet_2017_01_17_09_42_02_10000.ckpt')
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_19_13_59_00/rec_crs_2017_01_19_13_59_00_50000.ckpt')
             #
             # x, _ = self.dataset.train.next_batch(self.batch_size)
             # feed_dict = {self.input_tensor: x}
@@ -280,6 +312,15 @@ class InfoGANTrainer(object):
             log_vars = [x for _, x in self.log_vars]
             log_keys = [x for x, _ in self.log_vars]
 
+            # for i in range(1000):
+            #     x, _ = self.dataset.train.next_batch(self.batch_size)
+            #     feed_dict = {self.input_tensor: x}
+            #     # x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+            #     # feed_dict = {self.input_tensor: x, self.input_label: y}
+            #     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
+            #     for i in range(5):
+            #         sess.run(self.generator_trainer, feed_dict)
+
             if self.pretrain_classifier:
                 for epoch in range(20):
                     for i in range(self.updates_per_epoch):
@@ -295,13 +336,11 @@ class InfoGANTrainer(object):
                 all_log_vals = []
                 for i in range(self.updates_per_epoch):
                     pbar.update(i)
-                    x, _ = self.dataset.train.next_batch(self.batch_size)
-                    feed_dict = {self.input_tensor: x}
-                    # x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                    x, y = self.dataset.train.next_batch(self.batch_size)
                     # feed_dict = {self.input_tensor: x, self.input_label: y}
+                    feed_dict = {self.input_tensor: x}
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
-                    for i in range(5):
-                        sess.run(self.generator_trainer, feed_dict)
+                    sess.run(self.generator_trainer, feed_dict)
                     all_log_vals.append(log_vals)
                     counter += 1
 
@@ -312,9 +351,8 @@ class InfoGANTrainer(object):
                 # img_path = saver_imgs.save(sess, "imgs.ckpt")
                 # print("Generated images saved in file: %s" % img_path)
 
-                # x, y = self.dataset.supervised_train.next_batch(self.batch_size)
-                # feed_dict =  {self.input_tensor: x, self.input_label: y}
-                x, _ = self.dataset.train.next_batch(self.batch_size)
+                x, y = self.dataset.train.next_batch(self.batch_size)
+                # feed_dict = {self.input_tensor: x, self.input_label: y}
                 feed_dict = {self.input_tensor: x}
                 summary_str = sess.run(summary_op, feed_dict)
                 summary_writer.add_summary(summary_str, counter)

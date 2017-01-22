@@ -104,6 +104,55 @@ class RegularizedGAN(object):
                      apply(tf.nn.relu).
                      custom_deconv2d([0] + list(image_shape), k_h=4, k_w=4).
                      flatten())
+        elif network_type == "rec_crs":
+            with tf.variable_scope("d_net"):
+                HID_DIM1 = 2
+                inputs = pt.template("input")
+                hidden1 = inputs.reshape([-1] + list(image_shape)).conv2d(4,2).reshape([-1] + [28 * 28 * 2])
+                hidden21 = hidden1[:, 0:28 * 28]
+                hidden22 = hidden1[:, 28 * 28:28 * 28 * 2]
+                hidden31 = hidden21.fully_connected(image_size * image_size + 100)
+                hidden32 = hidden22.fully_connected(image_size * image_size + 100)
+                hidden40 = hidden31[:, 0:100] + hidden32[:, 0:100]
+                hidden41 = hidden31[:, 100:image_size * image_size]
+                hidden42 = hidden32[:, 100:image_size * image_size]
+                hidden50 = hidden40.fully_connected(1)
+                hidden51 = hidden41.fully_connected(1)
+                hidden52 = hidden42.fully_connected(1)
+
+                shared_template = hidden50.join([hidden51, hidden52])
+
+                self.discriminator_template = shared_template.custom_fully_connected(1)
+                self.encoder_template = \
+                    (shared_template.
+                     custom_fully_connected(128).
+                     fc_batch_norm().
+                     apply(leaky_rectify).
+                     custom_fully_connected(self.reg_latent_dist.dist_flat_dim))
+
+            with tf.variable_scope("g_net"):
+                HID_DIM1 = 2
+                all_inputs = pt.template("input")
+                pretty_input_cat = all_inputs[:, 1:1+HID_DIM1]  # pt.template("input_cat")
+                pretty_input_cont = all_inputs[:, 1+HID_DIM1:]  # pt.template("input_cont")
+
+                seq_cnt = pretty_input_cont.fully_connected(100)
+
+                seq_cat = []
+                rotated_output = []
+                output = []
+                for i in range(HID_DIM1):
+                    tmp = pretty_input_cat[:, i].reshape([self.batch_size, 1])
+                    seq_cat = seq_cat + [tmp.fully_connected(image_size * image_size)]
+                    #         seq_cat[i].reshape(([-1, image_size, image_size, 1]))
+
+                    rotated_output = rotated_output + [seq_cnt.join([seq_cat[i]])]
+                    print(i)
+                    output = output + [rotated_output[i].fully_connected(image_size * image_size)]
+
+                self.generator_template = output[0]
+                for i in range(1, HID_DIM1):
+                    self.generator_template += output[i]
         else:
             raise NotImplementedError
 

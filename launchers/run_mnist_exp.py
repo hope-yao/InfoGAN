@@ -4,7 +4,7 @@ from infogan.misc.distributions import Uniform, Categorical, Gaussian, MeanBerno
 
 import tensorflow as tf
 import os
-from infogan.misc.datasets import MnistDataset, ModelNet10
+from infogan.misc.datasets import MnistDataset, ModelNet10, rec_crs
 from infogan.models.regularized_gan import RegularizedGAN
 from infogan.algos.infogan_trainer import InfoGANTrainer
 from infogan.misc.utils import mkdir_p
@@ -14,8 +14,8 @@ import datetime
 
 if __name__ == "__main__":
 
-    network_type = "ModelNet"
-    switch_categorical_label = True # Modified by Hope, for supervised learning
+    network_type = "mnist"
+    switch_categorical_label = False # Modified by Hope, for supervised learning
 
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
@@ -38,11 +38,13 @@ if __name__ == "__main__":
         dataset = MnistDataset(switch_categorical_label)
     elif network_type == "ModelNet":
         dataset = ModelNet10(switch_categorical_label)
+    elif network_type == "rec_crs":
+        dataset = rec_crs(False)
     else:
         raise NotImplementedError
 
     latent_spec = [
-        (Uniform(62), False),
+        (Uniform(1), False),
         (Categorical(10), True),
         (Uniform(1, fix_std=True), True),
         (Uniform(1, fix_std=True), True),
@@ -66,13 +68,13 @@ if __name__ == "__main__":
         max_epoch=max_epoch,
         updates_per_epoch=updates_per_epoch,
         info_reg_coeff=1.0,
-        generator_learning_rate=2e-5,
-        discriminator_learning_rate=4e-5,
+        generator_learning_rate=1e-5,
+        discriminator_learning_rate=2e-5,
         has_classifier = False,
         pretrain_classifier = False,
     )
 
-    algo.generating()
-    # algo.train()
+    # algo.generating()
+    algo.train()
 
 
