@@ -154,7 +154,8 @@ class InfoGANTrainer(object):
         if self.model.network_type=='rec_crs':
             with tf.Session():
                 z_var = []
-                for cat in [[1, 0], [0, 1], [1, 1], [0, 0]]:
+                for cat in [[1, 0, 0], [0, 1, 1], [1, 0, 1], [1, 1, 1]]:
+                # for cat in [[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 1, 1]]:
                     for nregidx in [0, 0.5, 1]:
                         for contidx in range(0, 10, 1):
                             cont = contidx / 10.
@@ -274,10 +275,10 @@ class InfoGANTrainer(object):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_19_13_59_00/rec_crs_2017_01_19_13_59_00_50000.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_21_21_18_20/rec_crs_2017_01_21_21_18_20_20000.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_19_13_59_00/rec_crs_2017_01_19_13_59_00_50000.ckpt')
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_21_21_18_20/rec_crs_2017_01_21_21_18_20_20000.ckpt')
             #
             # x, _ = self.dataset.train.next_batch(self.batch_size)
             # feed_dict = {self.input_tensor: x}
@@ -340,6 +341,9 @@ class InfoGANTrainer(object):
                     # feed_dict = {self.input_tensor: x, self.input_label: y}
                     feed_dict = {self.input_tensor: x}
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
+                    sess.run(self.generator_trainer, feed_dict)
+                    sess.run(self.generator_trainer, feed_dict)
+                    sess.run(self.generator_trainer, feed_dict)
                     sess.run(self.generator_trainer, feed_dict)
                     all_log_vals.append(log_vals)
                     counter += 1
