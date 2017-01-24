@@ -15,7 +15,7 @@ import datetime
 if __name__ == "__main__":
 
     network_type = "rec_crs"
-    switch_categorical_label = False # Modified by Hope, for supervised learning
+    switch_categorical_label = True # Modified by Hope, for supervised learning
 
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
@@ -36,19 +36,31 @@ if __name__ == "__main__":
 
     if network_type == "mnist":
         dataset = MnistDataset(switch_categorical_label)
+        latent_spec = [
+            (Uniform(1), False),
+            (Categorical(10), True),
+            (Uniform(1, fix_std=True), True),
+            (Uniform(1, fix_std=True), True),
+        ]
     elif network_type == "ModelNet":
         dataset = ModelNet10(switch_categorical_label)
+        latent_spec = [
+            (Uniform(1), False),
+            (Categorical(10), True),
+            (Uniform(1, fix_std=True), True),
+            # (Uniform(1, fix_std=True), True),
+        ]
     elif network_type == "rec_crs":
         dataset = rec_crs(False)
+        latent_spec = [
+            (Uniform(1), False),
+            (Categorical(2), True),
+            (Categorical(2), True),
+            (Categorical(2), True),
+            (Uniform(1, fix_std=True), True),
+        ]
     else:
         raise NotImplementedError
-
-    latent_spec = [
-        (Uniform(1), False),
-        (Categorical(3), True),
-        (Uniform(1, fix_std=True), True),
-        # (Uniform(1, fix_std=True), True),
-    ]
 
     model = RegularizedGAN(
         output_dist=MeanBernoulli(dataset.image_dim),

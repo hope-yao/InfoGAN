@@ -122,7 +122,8 @@ class Categorical(Distribution):
 
     def logli(self, x_var, dist_info):
         prob = dist_info["prob"]
-        return tf.reduce_sum(tf.log(prob + TINY) * x_var, reduction_indices=1)
+        return tf.log(prob[:,0] + TINY) * x_var[:,0]
+        # return tf.reduce_sum(tf.log(prob + TINY) * x_var, reduction_indices=1)
 
     def prior_dist_info(self, batch_size):
         prob = tf.ones([batch_size, self.dim]) * floatX(1.0 / self.dim)
@@ -159,6 +160,7 @@ class Categorical(Distribution):
         return tf.nn.embedding_lookup(onehot, ids)
 
     def activate_dist(self, flat_dist):
+        # return dict(prob=tf.nn.sigmoid(flat_dist)) # BY HOPE: change to sigmoid
         return dict(prob=tf.nn.softmax(flat_dist))
 
     def entropy(self, dist_info):

@@ -170,10 +170,11 @@ class rec_crs(object):
         data1 = data.item()['rect_img']
         data2 = data.item()['cross_img']
         data3 = data.item()['sph_img']
-        label0 = np.asarray([[1,1,0]]*data0.shape[0])
-        label1 = np.asarray([[1,0,0]]*data1.shape[0])
-        label2 = np.asarray([[0,1,0]]*data2.shape[0])
-        label3 = np.asarray([[0,0,1]]*data3.shape[0])
+        self.label = label =  [[[1,1,0]], [[1,0,0]], [[0,1,0]], [[0,0,1]]]
+        label0 = np.asarray(label[0]*data0.shape[0])
+        label1 = np.asarray(label[1]*data1.shape[0])
+        label2 = np.asarray(label[2]*data2.shape[0])
+        label3 = np.asarray(label[3]*data3.shape[0])
         # label0 = np.asarray([[1,0,0]]*data0.shape[0])
         # label1 = np.asarray([[0,1,0]]*data1.shape[0])
         # label2 = np.asarray([[0,0,1]]*data2.shape[0])
