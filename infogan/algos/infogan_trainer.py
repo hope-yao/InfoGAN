@@ -55,7 +55,10 @@ class InfoGANTrainer(object):
 
         self.input_tensor = input_tensor = tf.placeholder(tf.float32, [self.batch_size, self.dataset.image_dim])
         if self.has_classifier:
-            self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 10]) # 10 different classes
+            if self.model.network_type=='rec_crs':
+                self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 6]) # 10 different classes
+            else:
+                self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 10]) # 10 different classes
 
         with pt.defaults_scope(phase=pt.Phase.train):
             z_var = self.model.latent_dist.sample_prior(self.batch_size)
@@ -81,7 +84,14 @@ class InfoGANTrainer(object):
             self.log_vars.append(("generator_loss", tf.reduce_mean(generator_loss )))
 
             if self.has_classifier:
-                prediction = self.model.disc_reg_dist_info(real_reg_z_dist_info)['id_0_prob']
+                if self.model.network_type=='rec_crs':
+                    tt = self.model.disc_reg_dist_info(real_reg_z_dist_info)
+                    tt0 = tt['id_0_prob']
+                    tt1 = tt['id_1_prob']
+                    tt2 = tt['id_2_prob']
+                    prediction = tf.concat(1, [tt0, tt1, tt2])
+                else:
+                    prediction = self.model.disc_reg_dist_info(real_reg_z_dist_info)['id_0_prob']
                 classifier_loss = -tf.reduce_mean(input_label * tf.log(prediction+TINY))
                 # classifier_loss =  -tf.reduce_mean(tf.reduce_sum(input_label * tf.log(prediction+TINY),1)) #This is the actual value
                 generator_loss += classifier_loss * 5
@@ -318,10 +328,10 @@ class InfoGANTrainer(object):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_21_21_18_20/rec_crs_2017_01_21_21_18_20_20000.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_24_10_27_22/rec_crs_2017_01_24_10_27_22_30000.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_21_21_18_20/rec_crs_2017_01_21_21_18_20_20000.ckpt')
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_24_10_27_22/rec_crs_2017_01_24_10_27_22_30000.ckpt')
             #
             # x, _ = self.dataset.train.next_batch(self.batch_size)
             # feed_dict = {self.input_tensor: x}
@@ -381,8 +391,10 @@ class InfoGANTrainer(object):
                 for i in range(self.updates_per_epoch):
                     pbar.update(i)
                     x, y = self.dataset.train.next_batch(self.batch_size)
-                    # feed_dict = {self.input_tensor: x, self.input_label: y}
-                    feed_dict = {self.input_tensor: x}
+                    if self.pretrain_classifier:
+                        feed_dict = {self.input_tensor: x, self.input_label: y}
+                    else:
+                        feed_dict = {self.input_tensor: x}
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
                     sess.run(self.generator_trainer, feed_dict)
                     sess.run(self.generator_trainer, feed_dict)
@@ -398,9 +410,11 @@ class InfoGANTrainer(object):
                 # img_path = saver_imgs.save(sess, "imgs.ckpt")
                 # print("Generated images saved in file: %s" % img_path)
 
-                x, y = self.dataset.train.next_batch(self.batch_size)
-                # feed_dict = {self.input_tensor: x, self.input_label: y}
-                feed_dict = {self.input_tensor: x}
+                x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                if self.pretrain_classifier:
+                    feed_dict = {self.input_tensor: x, self.input_label: y}
+                else:
+                    feed_dict = {self.input_tensor: x}
                 summary_str = sess.run(summary_op, feed_dict)
                 summary_writer.add_summary(summary_str, counter)
 
