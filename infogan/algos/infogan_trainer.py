@@ -328,10 +328,10 @@ class InfoGANTrainer(object):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/p2admin/Documents/Hope/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_13_16_43/rec_crs_2017_01_25_13_16_43_10000.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_24_10_27_22/rec_crs_2017_01_24_10_27_22_30000.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/p2admin/Documents/Hope/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_13_16_43/rec_crs_2017_01_25_13_16_43_10000.ckpt')
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_24_10_27_22/rec_crs_2017_01_24_10_27_22_30000.ckpt')
             #
             # x, _ = self.dataset.train.next_batch(self.batch_size)
             # feed_dict = {self.input_tensor: x}
