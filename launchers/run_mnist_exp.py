@@ -24,7 +24,7 @@ if __name__ == "__main__":
     root_checkpoint_dir = "ckt/" + network_type
     batch_size = 100
     updates_per_epoch = 100
-    max_epoch = 500
+    max_epoch = 100
 
     exp_name =  network_type + "_%s" % timestamp
 
@@ -80,15 +80,15 @@ if __name__ == "__main__":
         max_epoch=max_epoch,
         updates_per_epoch=updates_per_epoch,
         info_reg_coeff=1.0,
-        generator_learning_rate=1e-4,
-        discriminator_learning_rate=2e-5,
-        # generator_learning_rate=1e-3,
-        # discriminator_learning_rate=2e-4,
+        # generator_learning_rate=1e-4,
+        # discriminator_learning_rate=2e-5,
+        generator_learning_rate=1e-3,
+        discriminator_learning_rate=2e-4,
         has_classifier = True,
         pretrain_classifier = True,
     )
 
-    # algo.generating()
-    algo.train()
+    algo.generating()
+    # algo.train()
 
 

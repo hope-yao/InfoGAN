@@ -19,7 +19,7 @@ class InfoGANTrainer(object):
                  checkpoint_dir="ckt",
                  max_epoch=100,
                  updates_per_epoch=100,
-                 snapshot_interval=10000,
+                 snapshot_interval=1000,
                  info_reg_coeff=1.0,
                  discriminator_learning_rate=2e-4,
                  generator_learning_rate=2e-4,
@@ -207,8 +207,8 @@ class InfoGANTrainer(object):
                 z_var = []
                 z_var_reduce = []
                 # for cat in [[1, 0, 0], [0, 1, 1], [1, 0, 1], [1, 1, 1]]:
-                for cat in [[1,0, 0,1, 0,0], [0,0, 1,0, 0,0], [0,0, 0,0, 1,0,], [0,0, 1,0, 1,0,]]: # only the first categorical val is useful
-                    for nregidx in [0, 0.5, 1]:
+                for cat in [ [0,1, 0,1, 0,1,], [1,0, 0,1, 0,1,], [0,1, 1,0, 0,1], [0,1, 0,1, 1,0, ], [0,0, 1,0, 1,0,]]: # only the first categorical val is useful
+                    for nregidx in [0, 1]:
                         for contidx in range(0, 10, 1):
                             cont = contidx / 10.
                             z_var = z_var + [[nregidx] + cat + [cont]]
@@ -328,10 +328,10 @@ class InfoGANTrainer(object):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_24_10_27_22/rec_crs_2017_01_24_10_27_22_30000.ckpt.meta'
+            model_name = '/home/p2admin/Documents/Hope/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_13_16_43/rec_crs_2017_01_25_13_16_43_10000.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_24_10_27_22/rec_crs_2017_01_24_10_27_22_30000.ckpt')
+            saver.restore(sess, '/home/p2admin/Documents/Hope/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_13_16_43/rec_crs_2017_01_25_13_16_43_10000.ckpt')
             #
             # x, _ = self.dataset.train.next_batch(self.batch_size)
             # feed_dict = {self.input_tensor: x}
@@ -376,7 +376,7 @@ class InfoGANTrainer(object):
             #         sess.run(self.generator_trainer, feed_dict)
 
             if self.pretrain_classifier:
-                for epoch in range(20):
+                for epoch in range(10):
                     for i in range(self.updates_per_epoch):
                         x, y = self.dataset.supervised_train.next_batch(self.batch_size)
                         feed_dict = {self.input_tensor: x, self.input_label: y}
@@ -390,8 +390,8 @@ class InfoGANTrainer(object):
                 all_log_vals = []
                 for i in range(self.updates_per_epoch):
                     pbar.update(i)
-                    x, y = self.dataset.train.next_batch(self.batch_size)
-                    if self.pretrain_classifier:
+                    x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                    if self.has_classifier:
                         feed_dict = {self.input_tensor: x, self.input_label: y}
                     else:
                         feed_dict = {self.input_tensor: x}
@@ -411,7 +411,7 @@ class InfoGANTrainer(object):
                 # print("Generated images saved in file: %s" % img_path)
 
                 x, y = self.dataset.supervised_train.next_batch(self.batch_size)
-                if self.pretrain_classifier:
+                if self.has_classifier:
                     feed_dict = {self.input_tensor: x, self.input_label: y}
                 else:
                     feed_dict = {self.input_tensor: x}
