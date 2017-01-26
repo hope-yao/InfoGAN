@@ -19,7 +19,7 @@ class InfoGANTrainer(object):
                  checkpoint_dir="ckt",
                  max_epoch=100,
                  updates_per_epoch=100,
-                 snapshot_interval=1000,
+                 snapshot_interval=1,
                  info_reg_coeff=1.0,
                  discriminator_learning_rate=2e-4,
                  generator_learning_rate=2e-4,
@@ -56,19 +56,22 @@ class InfoGANTrainer(object):
         self.input_tensor = input_tensor = tf.placeholder(tf.float32, [self.batch_size, self.dataset.image_dim])
         if self.has_classifier:
             if self.model.network_type=='rec_crs':
-                self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 6]) # 10 different classes
+                self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 3]) # 3 different classes
             else:
                 self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 10]) # 10 different classes
 
         with pt.defaults_scope(phase=pt.Phase.train):
             z_var = self.model.latent_dist.sample_prior(self.batch_size)
             if self.model.network_type=='rec_crs':
-                # z_var_reduce = tf.concat(1, [tf.slice(z_var, [0, 0], [100, 1]), tf.slice(z_var, [100, 1], [100, 1]),
-                #               tf.slice(z_var, [100, 3], [100, 1]), tf.slice(z_var, [100, 5], [100, 1]),
-                #               tf.slice(z_var, [100, 7], [100, 1])])
-                # fake_x, _ = self.model.generate(z_var_reduce )
-                fake_x, _ = self.model.generate(z_var)
-                real_d, _, real_reg_z_dist_info, _ = self.model.discriminate(input_tensor)
+                s1 = tf.slice(z_var, [0, 0], [self.batch_size, 1])
+                s2 = tf.slice(z_var, [0, 1], [self.batch_size, 1])
+                s3 = tf.slice(z_var, [0, 3], [self.batch_size, 1])
+                s4 = tf.slice(z_var, [0, 5], [self.batch_size, 1])
+                s5 = tf.slice(z_var, [0, 7], [self.batch_size, 1])
+                z_var_reduce = tf.concat(1, [s1, s2, s3, s4, s5])
+                fake_x, _ = self.model.generate(z_var_reduce )
+                # fake_x, _ = self.model.generate(z_var)
+                real_d, _, real_reg_z_dist_info, real_reg_dist_flat = self.model.discriminate(input_tensor)
                 fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
             else:
                 fake_x, _ = self.model.generate(z_var)
@@ -89,10 +92,13 @@ class InfoGANTrainer(object):
                     tt0 = tt['id_0_prob']
                     tt1 = tt['id_1_prob']
                     tt2 = tt['id_2_prob']
-                    prediction = tf.concat(1, [tt0, tt1, tt2])
+                    # prediction = tf.concat(1, [tt0[:,0], tt1[:,0], tt2[:,0]])
+                    prediction = tf.concat(1, [tf.reshape(tt0[:, 0], (self.batch_size, 1)), tf.reshape(tt1[:, 0], (self.batch_size, 1)),
+                                               tf.reshape(tt2[:, 0], (self.batch_size, 1))])
                 else:
                     prediction = self.model.disc_reg_dist_info(real_reg_z_dist_info)['id_0_prob']
-                classifier_loss = -tf.reduce_mean(input_label * tf.log(prediction+TINY))
+                # classifier_loss = -tf.reduce_mean(input_label * tf.log(prediction+TINY))
+                classifier_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(prediction,input_label))
                 # classifier_loss =  -tf.reduce_mean(tf.reduce_sum(input_label * tf.log(prediction+TINY),1)) #This is the actual value
                 generator_loss += classifier_loss * 5
                 self.log_vars.append(("classifier_loss", classifier_loss))
@@ -206,16 +212,21 @@ class InfoGANTrainer(object):
             with tf.Session():
                 z_var = []
                 z_var_reduce = []
-                # for cat in [[1, 0, 0], [0, 1, 1], [1, 0, 1], [1, 1, 1]]:
-                for cat in [ [0,1, 0,1, 0,1,], [1,0, 0,1, 0,1,], [0,1, 1,0, 0,1], [0,1, 0,1, 1,0, ], [0,0, 1,0, 1,0,]]: # only the first categorical val is useful
+                for cat in [ [0, 0, 0,], [1, 0, 0,], [0, 1, 0], [0, 0, 1, ], [1, 1, 0,]]: # only the first categorical val is useful
+                # for cat in [ [0,1, 0,1, 0,1,], [1,0, 0,1, 0,1,], [0,1, 1,0, 0,1], [0,1, 0,1, 1,0, ], [1,0, 1,0, 0,0,]]: # only the first categorical val is useful
                     for nregidx in [0, 1]:
                         for contidx in range(0, 10, 1):
                             cont = contidx / 10.
-                            z_var = z_var + [[nregidx] + cat + [cont]]
+                            z_var_reduce = z_var_reduce + [[nregidx] + cat + [cont]]
                             # z_var_reduce = z_var_reduce + [[nregidx] + cat[0,2,4] + [cont]]
-                z_var = tf.constant(np.asarray(z_var, dtype=np.float32)[0:100])
-
-                _, x_dist_info = self.model.generate(z_var)
+                # z_var = tf.constant(np.asarray(z_var, dtype=np.float32)[0:100])
+                # s1 = tf.slice(z_var, [0, 0], [self.batch_size, 1])
+                # s2 = tf.slice(z_var, [0, 1], [self.batch_size, 1])
+                # s3 = tf.slice(z_var, [0, 3], [self.batch_size, 1])
+                # s4 = tf.slice(z_var, [0, 5], [self.batch_size, 1])
+                # s5 = tf.slice(z_var, [0, 7], [self.batch_size, 1])
+                # z_var_reduce = tf.concat(1, [s1, s2, s3, s4, s5])
+                _, x_dist_info = self.model.generate(z_var_reduce)
                 img_var = x_dist_info["p"]
                 img_var = self.dataset.inverse_transform(img_var)
                 rows = 10
@@ -328,20 +339,57 @@ class InfoGANTrainer(object):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_24_10_27_22/rec_crs_2017_01_24_10_27_22_30000.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_17_26_23/rec_crs_2017_01_25_17_26_23_9000.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_24_10_27_22/rec_crs_2017_01_24_10_27_22_30000.ckpt')
-            #
-            # x, _ = self.dataset.train.next_batch(self.batch_size)
-            # feed_dict = {self.input_tensor: x}
-            # log_vars = [x for _, x in self.log_vars]
-            # log_vals = sess.run(log_vars, feed_dict)[1:]
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_17_26_23/rec_crs_2017_01_25_17_26_23_9000.ckpt')
+
             self.visualize_all_factors()
             from infogan.misc.test_saved_model3d import plot_gen
             imgs = self.imgs.eval()
         # plot_gen(imgs)
         np.save('imgs',imgs)
+
+    def classify(self):
+        self.init_opt()
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+            # load model
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_22_10_14/rec_crs_2017_01_25_22_10_14_2501.ckpt.meta'
+            saver = tf.train.Saver()
+            new_saver = tf.train.import_meta_graph(model_name)
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_22_10_14/rec_crs_2017_01_25_22_10_14_2501.ckpt')
+            data = np.load('rec_crs.npy')
+
+            print('sphere prediction')
+            data3 = data.item()['sph_img'].astype(np.float32)
+            batch_size = 10
+            img_in = data3[110:110+batch_size].reshape(batch_size,28, 28)
+            real_d, _, real_reg_z_dist_info, _ = self.model.discriminate(img_in)
+            tt = self.model.disc_reg_dist_info(real_reg_z_dist_info)
+            tt0 = tt['id_0_prob']
+            tt1 = tt['id_1_prob']
+            tt2 = tt['id_2_prob']
+            prediction = tf.concat(1, [tf.reshape(tt0[:, 0], (batch_size, 1)), tf.reshape(tt1[:, 0], (batch_size, 1)),
+                                       tf.reshape(tt2[:, 0], (batch_size, 1))])
+            allprediction = tf.concat(1, [tt0, tt1, tt2])
+            print(allprediction.eval())
+            print(prediction.eval())
+
+            print('cross prediction')
+            data3 = data.item()['cross_img'].astype(np.float32)
+            batch_size = 10
+            img_in = data3[110:110 + batch_size].reshape(batch_size,28, 28)
+            real_d, _, real_reg_z_dist_info, _ = self.model.discriminate(img_in)
+            tt = self.model.disc_reg_dist_info(real_reg_z_dist_info)
+            tt0 = tt['id_0_prob']
+            tt1 = tt['id_1_prob']
+            tt2 = tt['id_2_prob']
+            prediction = tf.concat(1, [tf.reshape(tt0[:, 0], (batch_size, 1)), tf.reshape(tt1[:, 0], (batch_size, 1)),
+                                       tf.reshape(tt2[:, 0], (batch_size, 1))])
+            allprediction = tf.concat(1, [tt0, tt1, tt2])
+            print(allprediction.eval())
+            print(prediction.eval())
 
     def train(self):
 
@@ -366,21 +414,15 @@ class InfoGANTrainer(object):
             log_vars = [x for _, x in self.log_vars]
             log_keys = [x for x, _ in self.log_vars]
 
-            # for i in range(1000):
-            #     x, _ = self.dataset.train.next_batch(self.batch_size)
-            #     feed_dict = {self.input_tensor: x}
-            #     # x, y = self.dataset.supervised_train.next_batch(self.batch_size)
-            #     # feed_dict = {self.input_tensor: x, self.input_label: y}
-            #     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
-            #     for i in range(5):
-            #         sess.run(self.generator_trainer, feed_dict)
-
             if self.pretrain_classifier:
-                for epoch in range(10):
-                    for i in range(self.updates_per_epoch):
+                for epoch in range(50):
+                    for i in range(50):
                         x, y = self.dataset.supervised_train.next_batch(self.batch_size)
                         feed_dict = {self.input_tensor: x, self.input_label: y}
                         sess.run(self.classifer_trainer, feed_dict)
+                        summary_str = sess.run(summary_op, feed_dict)
+                        summary_writer.add_summary(summary_str, counter)
+                        counter += 1
 
             for epoch in range(self.max_epoch):
                 widgets = ["epoch #%d|" % epoch, Percentage(), Bar(), ETA()]
