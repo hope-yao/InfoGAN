@@ -160,9 +160,9 @@ class Categorical(Distribution):
         return tf.nn.embedding_lookup(onehot, ids)
 
     def activate_dist(self, flat_dist):
-        return dict(prob=flat_dist) # BY HOPE: change to identity
+        # return dict(prob=flat_dist) # BY HOPE: change to identity
         # return dict(prob=tf.nn.sigmoid(flat_dist)) # BY HOPE: change to sigmoid
-        # return dict(prob=tf.nn.softmax(flat_dist))
+        return dict(prob=tf.nn.softmax(flat_dist))
 
     def entropy(self, dist_info):
         prob = dist_info["prob"]

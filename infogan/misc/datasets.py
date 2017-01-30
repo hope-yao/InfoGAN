@@ -216,11 +216,14 @@ class rec_crs(object):
         sup_labels = []
         rnd_state = np.random.get_state()
         np.random.seed(0)
-        for cat in range(10):
-            ids = np.where(self.train.labels == cat)[0]
-            np.random.shuffle(ids)
-            sup_images.extend(self.train.images[ids])
-            sup_labels.extend(self.train.labels[ids])
+        ids = []
+        for cat in label:
+            for idx_i,label_i in enumerate(self.train.labels):
+                if (label_i == cat[0]).all():
+                    ids = ids + [idx_i]
+        np.random.shuffle(ids)
+        sup_images.extend(self.train.images[ids])
+        sup_labels.extend(self.train.labels[ids])
         np.random.set_state(rnd_state)
         self.supervised_train = supervised_Dataset(
             np.asarray(sup_images),

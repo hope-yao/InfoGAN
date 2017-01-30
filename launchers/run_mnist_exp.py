@@ -23,8 +23,8 @@ if __name__ == "__main__":
     root_log_dir = "logs/" + network_type
     root_checkpoint_dir = "ckt/" + network_type
     batch_size = 100
-    updates_per_epoch = 1
-    max_epoch = 1
+    updates_per_epoch = 100
+    max_epoch = 100
 
     exp_name =  network_type + "_%s" % timestamp
 

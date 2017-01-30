@@ -19,7 +19,7 @@ class InfoGANTrainer(object):
                  checkpoint_dir="ckt",
                  max_epoch=100,
                  updates_per_epoch=100,
-                 snapshot_interval=1,
+                 snapshot_interval=3000,
                  info_reg_coeff=1.0,
                  discriminator_learning_rate=2e-4,
                  generator_learning_rate=2e-4,
@@ -63,13 +63,17 @@ class InfoGANTrainer(object):
         with pt.defaults_scope(phase=pt.Phase.train):
             z_var = self.model.latent_dist.sample_prior(self.batch_size)
             if self.model.network_type=='rec_crs':
-                s1 = tf.slice(z_var, [0, 0], [self.batch_size, 1])
+                s1 = tf.slice(z_var, [0, 0], [self.batch_size, 1])  # noise z
                 s2 = tf.slice(z_var, [0, 1], [self.batch_size, 1])
                 s3 = tf.slice(z_var, [0, 3], [self.batch_size, 1])
                 s4 = tf.slice(z_var, [0, 5], [self.batch_size, 1])
-                s5 = tf.slice(z_var, [0, 7], [self.batch_size, 1])
+                s5 = tf.slice(z_var, [0, 7], [self.batch_size, 1])  # continuous c
                 z_var_reduce = tf.concat(1, [s1, s2, s3, s4, s5])
-                fake_x, _ = self.model.generate(z_var_reduce )
+                # self.log_vars.append(("z_var ", tf.reduce_mean(z_var)))
+                # self.log_vars.append(("z_var_reduce",  tf.reduce_mean(z_var_reduce) ))
+                fake_x, aaa = self.model.generate(z_var_reduce )
+                # self.log_vars.append(("aaa",  tf.reduce_mean(aaa) ))
+                # self.log_vars.append(("fake_x",  tf.reduce_mean(fake_x) ))
                 # fake_x, _ = self.model.generate(z_var)
                 real_d, _, real_reg_z_dist_info, real_reg_dist_flat = self.model.discriminate(input_tensor)
                 fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
@@ -98,9 +102,10 @@ class InfoGANTrainer(object):
                 else:
                     prediction = self.model.disc_reg_dist_info(real_reg_z_dist_info)['id_0_prob']
                 # classifier_loss = -tf.reduce_mean(input_label * tf.log(prediction+TINY))
-                classifier_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(prediction,input_label))
+                self.classifier_loss = classifier_loss = -tf.reduce_sum(tf.log(tf.reduce_sum(tf.multiply(prediction, input_label) + tf.multiply((1 - prediction), (1 - input_label)), axis=1)))
+                # classifier_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(prediction,input_label))
                 # classifier_loss =  -tf.reduce_mean(tf.reduce_sum(input_label * tf.log(prediction+TINY),1)) #This is the actual value
-                generator_loss += classifier_loss * 5
+                discriminator_loss += classifier_loss / 100
                 self.log_vars.append(("classifier_loss", classifier_loss))
                 classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
                 all_vars = tf.trainable_variables()
@@ -143,37 +148,34 @@ class InfoGANTrainer(object):
                     discriminator_loss -= self.info_reg_coeff * cont_mi_est
                     generator_loss -= self.info_reg_coeff * cont_mi_est
             else:
-                # compute for discrete and continuous codes separately
-                # discrete:
-                if len(self.model.reg_disc_latent_dist.dists) > 0:
-                    disc_reg_z = self.model.disc_reg_z(reg_z)
-                    # disc_reg_dist_info = self.model.disc_reg_dist_info(fake_reg_z_dist_info)
-                    # disc_log_q_c_given_x = self.model.reg_disc_latent_dist.logli(disc_reg_z, disc_reg_dist_info)
-                    # disc_log_q_c = self.model.reg_disc_latent_dist.logli_prior(disc_reg_z)
-                    disc_cross_ent = tf.reduce_mean(-disc_log_q_c_given_x)
-                    disc_ent = tf.reduce_mean(-disc_log_q_c)
-                    disc_mi_est = disc_ent - disc_cross_ent
-                    mi_est += disc_mi_est
-                    cross_ent += disc_cross_ent
-                    self.log_vars.append(("MI_disc", disc_mi_est))
-                    self.log_vars.append(("CrossEnt_disc", disc_cross_ent))
-                    discriminator_loss -= self.info_reg_coeff * disc_mi_est
-                    generator_loss -= self.info_reg_coeff * disc_mi_est
-                # continuous:
-                if len(self.model.reg_cont_latent_dist.dists) > 0:
-                    cont_reg_z = self.model.cont_reg_z(reg_z)
-                    cont_reg_dist_info = self.model.cont_reg_dist_info(fake_reg_z_dist_info)
-                    cont_log_q_c_given_x = self.model.reg_cont_latent_dist.logli(cont_reg_z, cont_reg_dist_info)
-                    cont_log_q_c = self.model.reg_cont_latent_dist.logli_prior(cont_reg_z)
-                    cont_cross_ent = tf.reduce_mean(-cont_log_q_c_given_x)
-                    cont_ent = tf.reduce_mean(-cont_log_q_c)
-                    cont_mi_est = cont_ent - cont_cross_ent
-                    mi_est += cont_mi_est
-                    cross_ent += cont_cross_ent
-                    self.log_vars.append(("MI_cont", cont_mi_est))
-                    self.log_vars.append(("CrossEnt_cont", cont_cross_ent))
-                    discriminator_loss -= self.info_reg_coeff * cont_mi_est
-                    generator_loss -= self.info_reg_coeff * cont_mi_est
+                fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
+                tt0 = fake_reg_z_dist_info['id_0_prob']
+                tt1 = fake_reg_z_dist_info['id_1_prob']
+                tt2 = fake_reg_z_dist_info['id_2_prob']
+                zz0 = fake_reg_z_dist_info['id_3_mean']
+                # zz1 = dist_flat["id_4_mean"] # this is noise, but not output by the decoder network
+                z_var = tf.concat(1, [tt0, tt1, tt2, zz0])
+                sum_er = tf.pow((tf.reduce_sum(reg_z - z_var)),2.) /self.batch_size
+                self.log_vars.append(("C2X2C_er", sum_er ))
+                discriminator_loss += sum_er
+                generator_loss += sum_er
+
+                # s1 =
+                s1 = real_reg_z_dist_info['id_0_prob']
+                s2 = real_reg_z_dist_info['id_1_prob']
+                s3 = real_reg_z_dist_info['id_2_prob']
+                s4 = real_reg_z_dist_info['id_3_mean']
+                z_var_reduce = tf.concat(1, [tf.reshape(s1[:, 0], (self.batch_size, 1)),
+                                             tf.reshape(s1[:, 0], (self.batch_size, 1)),
+                                             tf.reshape(s2[:, 0], (self.batch_size, 1)),
+                                             tf.reshape(s3[:, 0], (self.batch_size, 1)),
+                                             tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
+                x_regenearted, _ = self.model.generate(z_var_reduce)
+                sum_er = tf.pow((tf.reduce_sum(input_tensor - x_regenearted)), 2.) / self.batch_size
+                self.log_vars.append(("X2C2X_er", sum_er))
+                discriminator_loss += sum_er
+                generator_loss += sum_er
+
 
             for idx, dist_info in enumerate(self.model.reg_latent_dist.split_dist_info(fake_reg_z_dist_info)):
                 if "stddev" in dist_info:
@@ -192,11 +194,11 @@ class InfoGANTrainer(object):
             self.log_vars.append(("max_fake_d", tf.reduce_max(fake_d)))
             self.log_vars.append(("min_fake_d", tf.reduce_min(fake_d)))
 
-            discriminator_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
-            self.discriminator_trainer = pt.apply_optimizer(discriminator_optimizer, losses=[discriminator_loss],
-                                                            var_list=d_vars)
-
+            # discriminator_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+            discriminator_optimizer = tf.train.GradientDescentOptimizer(self.discriminator_learning_rate)
+            self.discriminator_trainer = pt.apply_optimizer(discriminator_optimizer, losses=[discriminator_loss],var_list=d_vars)
             generator_optimizer = tf.train.AdamOptimizer(self.generator_learning_rate, beta1=0.5)
+            # generator_optimizer = tf.train.GradientDescentOptimizer(self.generator_learning_rate)
             self.generator_trainer = pt.apply_optimizer(generator_optimizer, losses=[generator_loss], var_list=g_vars)
 
             for k, v in self.log_vars:
@@ -206,6 +208,7 @@ class InfoGANTrainer(object):
         with pt.defaults_scope(phase=pt.Phase.test):
             with tf.variable_scope("model", reuse=True) as scope:
                 self.visualize_all_factors()
+                print('testing visual')
 
     def visualize_all_factors(self):
         if self.model.network_type=='rec_crs':
@@ -339,10 +342,10 @@ class InfoGANTrainer(object):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_17_26_23/rec_crs_2017_01_25_17_26_23_9000.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_26_17_27_12/rec_crs_2017_01_26_17_27_12_9000.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_17_26_23/rec_crs_2017_01_25_17_26_23_9000.ckpt')
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_26_17_27_12/rec_crs_2017_01_26_17_27_12_9000.ckpt')
 
             self.visualize_all_factors()
             from infogan.misc.test_saved_model3d import plot_gen
@@ -355,41 +358,49 @@ class InfoGANTrainer(object):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_22_10_14/rec_crs_2017_01_25_22_10_14_2501.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_29_16_01_27/Classifier.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_25_22_10_14/rec_crs_2017_01_25_22_10_14_2501.ckpt')
-            data = np.load('rec_crs.npy')
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_29_16_01_27/Classifier.ckpt')
 
-            print('sphere prediction')
-            data3 = data.item()['sph_img'].astype(np.float32)
-            batch_size = 10
-            img_in = data3[110:110+batch_size].reshape(batch_size,28, 28)
+            img_in, input_label = self.dataset.supervised_train.next_batch(self.batch_size)
+
             real_d, _, real_reg_z_dist_info, _ = self.model.discriminate(img_in)
             tt = self.model.disc_reg_dist_info(real_reg_z_dist_info)
             tt0 = tt['id_0_prob']
             tt1 = tt['id_1_prob']
             tt2 = tt['id_2_prob']
-            prediction = tf.concat(1, [tf.reshape(tt0[:, 0], (batch_size, 1)), tf.reshape(tt1[:, 0], (batch_size, 1)),
-                                       tf.reshape(tt2[:, 0], (batch_size, 1))])
-            allprediction = tf.concat(1, [tt0, tt1, tt2])
-            print(allprediction.eval())
+            prediction = tf.concat(1, [tf.reshape(tt0[:, 0], (self.batch_size, 1)), tf.reshape(tt1[:, 0], (self.batch_size, 1)),
+                                       tf.reshape(tt2[:, 0], (self.batch_size, 1))])
             print(prediction.eval())
+            print(input_label - prediction.eval())
+            classifier_loss = -tf.reduce_sum(tf.log(
+                tf.reduce_sum(tf.multiply(prediction, input_label) + tf.multiply((1 - prediction), (1 - input_label)),
+                              axis=1)))
+            print(classifier_loss.eval())
 
-            print('cross prediction')
-            data3 = data.item()['cross_img'].astype(np.float32)
-            batch_size = 10
-            img_in = data3[110:110 + batch_size].reshape(batch_size,28, 28)
-            real_d, _, real_reg_z_dist_info, _ = self.model.discriminate(img_in)
-            tt = self.model.disc_reg_dist_info(real_reg_z_dist_info)
-            tt0 = tt['id_0_prob']
-            tt1 = tt['id_1_prob']
-            tt2 = tt['id_2_prob']
-            prediction = tf.concat(1, [tf.reshape(tt0[:, 0], (batch_size, 1)), tf.reshape(tt1[:, 0], (batch_size, 1)),
-                                       tf.reshape(tt2[:, 0], (batch_size, 1))])
-            allprediction = tf.concat(1, [tt0, tt1, tt2])
-            print(allprediction.eval())
-            print(prediction.eval())
+            # real_d, _, real_reg_z_dist_info, reg_dist_flat = self.model.discriminate(img_in)
+            # dist_flat = self.model.latent_dist.activate_dist(reg_dist_flat)
+            # zz0 = dist_flat['id_0_mean']  # regularized continuous variable
+            # tt0 = dist_flat['id_1_prob']
+            # tt1 = dist_flat['id_2_prob']
+            # tt2 = dist_flat['id_3_prob']
+            # # zz1 = dist_flat["id_4_mean"] # this is noise, but not output by the decoder network
+            z_var = np.concatenate([
+                np.asarray([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]*10).reshape(self.batch_size, 1),
+                tt0[:, 0].eval().reshape(self.batch_size, 1),
+                tt1[:, 0].eval().reshape(self.batch_size, 1),
+                tt2[:, 0].eval().reshape(self.batch_size, 1),
+                zz0.eval().reshape(self.batch_size, 1)
+            ], axis = 1)
+            print(input_label)
+            print(z_var)
+            fake_x, _ = self.model.generate(z_var.tolist())
+            img = np.asarray(fake_x.eval()).reshape(self.batch_size, 28, 28)
+            import matplotlib.pyplot as plt
+            plt.imshow(img[0])
+            plt.show()
+            plt.hold(True)
 
     def train(self):
 
@@ -416,13 +427,15 @@ class InfoGANTrainer(object):
 
             if self.pretrain_classifier:
                 for epoch in range(50):
-                    for i in range(50):
+                    for i in range(20):
                         x, y = self.dataset.supervised_train.next_batch(self.batch_size)
                         feed_dict = {self.input_tensor: x, self.input_label: y}
                         sess.run(self.classifer_trainer, feed_dict)
                         summary_str = sess.run(summary_op, feed_dict)
                         summary_writer.add_summary(summary_str, counter)
                         counter += 1
+                fn = saver.save(sess, "%s/%s.ckpt" % (self.checkpoint_dir, 'Classifier'))
+                print("Classifier saved in file: %s" % fn)
 
             for epoch in range(self.max_epoch):
                 widgets = ["epoch #%d|" % epoch, Percentage(), Bar(), ETA()]
