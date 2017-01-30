@@ -105,7 +105,7 @@ class InfoGANTrainer(object):
                 self.classifier_loss = classifier_loss = -tf.reduce_sum(tf.log(tf.reduce_sum(tf.multiply(prediction, input_label) + tf.multiply((1 - prediction), (1 - input_label)), axis=1)))
                 # classifier_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(prediction,input_label))
                 # classifier_loss =  -tf.reduce_mean(tf.reduce_sum(input_label * tf.log(prediction+TINY),1)) #This is the actual value
-                discriminator_loss += classifier_loss / 100
+                discriminator_loss += (classifier_loss)
                 self.log_vars.append(("classifier_loss", classifier_loss))
                 classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
                 all_vars = tf.trainable_variables()
@@ -115,7 +115,7 @@ class InfoGANTrainer(object):
             mi_est = tf.constant(0.)
             cross_ent = tf.constant(0.)
 
-            if 1:
+            if 0:
                 # compute for discrete and continuous codes separately
                 # discrete:
                 if len(self.model.reg_disc_latent_dist.dists) > 0:
@@ -148,30 +148,35 @@ class InfoGANTrainer(object):
                     discriminator_loss -= self.info_reg_coeff * cont_mi_est
                     generator_loss -= self.info_reg_coeff * cont_mi_est
             else:
-                fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
-                tt0 = fake_reg_z_dist_info['id_0_prob']
-                tt1 = fake_reg_z_dist_info['id_1_prob']
-                tt2 = fake_reg_z_dist_info['id_2_prob']
-                zz0 = fake_reg_z_dist_info['id_3_mean']
-                # zz1 = dist_flat["id_4_mean"] # this is noise, but not output by the decoder network
-                z_var = tf.concat(1, [tt0, tt1, tt2, zz0])
-                sum_er = tf.pow((tf.reduce_sum(reg_z - z_var)),2.) /self.batch_size
-                self.log_vars.append(("C2X2C_er", sum_er ))
-                discriminator_loss += sum_er
-                generator_loss += sum_er
+                # fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
+                # tt0 = fake_reg_z_dist_info['id_0_prob']
+                # tt1 = fake_reg_z_dist_info['id_1_prob']
+                # tt2 = fake_reg_z_dist_info['id_2_prob']
+                # zz0 = fake_reg_z_dist_info['id_3_mean']
+                # # zz1 = dist_flat["id_4_mean"] # this is noise, but not output by the decoder network
+                # z_var = tf.concat(1, [tt0, tt1, tt2, zz0])
+                # sum_er = tf.pow((tf.reduce_sum(reg_z - z_var)),2.) /self.batch_size
+                # self.log_vars.append(("C2X2C_er", sum_er ))
+                # discriminator_loss += sum_er
+                # generator_loss += sum_er
 
-                # s1 =
                 s1 = real_reg_z_dist_info['id_0_prob']
                 s2 = real_reg_z_dist_info['id_1_prob']
                 s3 = real_reg_z_dist_info['id_2_prob']
                 s4 = real_reg_z_dist_info['id_3_mean']
-                z_var_reduce = tf.concat(1, [tf.reshape(s1[:, 0], (self.batch_size, 1)),
-                                             tf.reshape(s1[:, 0], (self.batch_size, 1)),
-                                             tf.reshape(s2[:, 0], (self.batch_size, 1)),
-                                             tf.reshape(s3[:, 0], (self.batch_size, 1)),
-                                             tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
-                x_regenearted, _ = self.model.generate(z_var_reduce)
-                sum_er = tf.pow((tf.reduce_sum(input_tensor - x_regenearted)), 2.) / self.batch_size
+
+                x_ave = tf.zeros((100,28*28))
+                for i in range(10): # average 10 different noise
+                    z_var = self.model.latent_dist.sample_prior(self.batch_size)
+                    s0 = tf.slice(z_var, [0, 0], [self.batch_size, 1])  # noise z
+                    z_var_reduce = tf.concat(1, [tf.reshape(s0[:, 0], (self.batch_size, 1)),
+                                                 tf.reshape(s1[:, 0], (self.batch_size, 1)),
+                                                 tf.reshape(s2[:, 0], (self.batch_size, 1)),
+                                                 tf.reshape(s3[:, 0], (self.batch_size, 1)),
+                                                 tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
+                    x_regenearted, _ = self.model.generate(z_var_reduce)
+                    x_ave += x_regenearted
+                sum_er = tf.reduce_sum(tf.pow(input_tensor - x_ave / 10., 2.)) / self.batch_size / 28 ** 2 * 30
                 self.log_vars.append(("X2C2X_er", sum_er))
                 discriminator_loss += sum_er
                 generator_loss += sum_er
@@ -215,7 +220,7 @@ class InfoGANTrainer(object):
             with tf.Session():
                 z_var = []
                 z_var_reduce = []
-                for cat in [ [0, 0, 0,], [1, 0, 0,], [0, 1, 0], [0, 0, 1, ], [1, 1, 0,]]: # only the first categorical val is useful
+                for cat in [ [0, 1, 1,], [1, 0, 0,], [0, 1, 0], [0, 0, 1, ], [1, 1, 0,]]: # only the first categorical val is useful
                 # for cat in [ [0,1, 0,1, 0,1,], [1,0, 0,1, 0,1,], [0,1, 1,0, 0,1], [0,1, 0,1, 1,0, ], [1,0, 1,0, 0,0,]]: # only the first categorical val is useful
                     for nregidx in [0, 1]:
                         for contidx in range(0, 10, 1):
@@ -353,15 +358,60 @@ class InfoGANTrainer(object):
         # plot_gen(imgs)
         np.save('imgs',imgs)
 
+    def regen(self):
+        self.init_opt()
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+            # load model
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_30_12_49_23/rec_crs_2017_01_30_12_49_23_9000.ckpt.meta'
+            saver = tf.train.Saver()
+            new_saver = tf.train.import_meta_graph(model_name)
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_30_12_49_23/rec_crs_2017_01_30_12_49_23_9000.ckpt')
+
+            input_tensor, input_label = self.dataset.supervised_train.next_batch(self.batch_size)
+
+            real_d, _, real_reg_z_dist_info, real_reg_dist_flat = self.model.discriminate(input_tensor)
+
+            s1 = real_reg_z_dist_info['id_0_prob']
+            s2 = real_reg_z_dist_info['id_1_prob']
+            s3 = real_reg_z_dist_info['id_2_prob']
+            s4 = real_reg_z_dist_info['id_3_mean']
+
+            x_ave = tf.zeros((100, 28 * 28))
+            for i in range(10):  # average 10 different noise
+                z_var = self.model.latent_dist.sample_prior(self.batch_size)
+                s0 = tf.slice(z_var, [0, 0], [self.batch_size, 1])  # noise z
+                z_var_reduce = tf.concat(1, [tf.reshape(s0[:, 0], (self.batch_size, 1)),
+                                             tf.reshape(s1[:, 0], (self.batch_size, 1)),
+                                             tf.reshape(s2[:, 0], (self.batch_size, 1)),
+                                             tf.reshape(s3[:, 0], (self.batch_size, 1)),
+                                             tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
+                x_regenearted, _ = self.model.generate(z_var_reduce)
+                x_ave += x_regenearted
+            sum_er = tf.reduce_sum(tf.pow(input_tensor - x_ave / 10., 2.)) / self.batch_size / 28 ** 2 * 30
+
+            x_in = input_tensor
+            x_regen = x_ave.eval()
+            z_regen = z_var_reduce.eval()
+
+            import seaborn
+            import matplotlib.pyplot as plt
+            ii = 12
+            plt.figure()
+            plt.imshow(x_in[ii].reshape(28, 28))
+            plt.figure()
+            plt.imshow(x_regen[ii].reshape(28, 28))
+            print(z_regen[ii])
+
     def classify(self):
         self.init_opt()
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_29_16_01_27/Classifier.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_30_12_49_23/rec_crs_2017_01_30_12_49_23_9000.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_29_16_01_27/Classifier.ckpt')
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_30_12_49_23/rec_crs_2017_01_30_12_49_23_9000.ckpt')
 
             img_in, input_label = self.dataset.supervised_train.next_batch(self.batch_size)
 
@@ -391,7 +441,7 @@ class InfoGANTrainer(object):
                 tt0[:, 0].eval().reshape(self.batch_size, 1),
                 tt1[:, 0].eval().reshape(self.batch_size, 1),
                 tt2[:, 0].eval().reshape(self.batch_size, 1),
-                zz0.eval().reshape(self.batch_size, 1)
+                real_reg_z_dist_info['id_3_prob'].eval().reshape(self.batch_size, 1)
             ], axis = 1)
             print(input_label)
             print(z_var)
@@ -451,9 +501,6 @@ class InfoGANTrainer(object):
                     else:
                         feed_dict = {self.input_tensor: x}
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
-                    sess.run(self.generator_trainer, feed_dict)
-                    sess.run(self.generator_trainer, feed_dict)
-                    sess.run(self.generator_trainer, feed_dict)
                     sess.run(self.generator_trainer, feed_dict)
                     all_log_vals.append(log_vals)
                     counter += 1
