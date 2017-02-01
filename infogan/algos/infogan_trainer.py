@@ -57,6 +57,8 @@ class InfoGANTrainer(object):
         if self.has_classifier:
             if self.model.network_type=='rec_crs':
                 self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 3]) # 3 different classes
+                self.penalty = input_label[:, 0] + input_label[:, 1] + input_label[:, 2] * 50
+                # self.penalty = tf.ones((self.batch_size,1))
             else:
                 self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 10]) # 10 different classes
 
@@ -148,23 +150,21 @@ class InfoGANTrainer(object):
                     discriminator_loss -= self.info_reg_coeff * cont_mi_est
                     generator_loss -= self.info_reg_coeff * cont_mi_est
             else:
-                # fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
-                # tt0 = fake_reg_z_dist_info['id_0_prob']
-                # tt1 = fake_reg_z_dist_info['id_1_prob']
-                # tt2 = fake_reg_z_dist_info['id_2_prob']
-                # zz0 = fake_reg_z_dist_info['id_3_mean']
-                # # zz1 = dist_flat["id_4_mean"] # this is noise, but not output by the decoder network
-                # z_var = tf.concat(1, [tt0, tt1, tt2, zz0])
-                # sum_er = tf.pow((tf.reduce_sum(reg_z - z_var)),2.) /self.batch_size
-                # self.log_vars.append(("C2X2C_er", sum_er ))
-                # discriminator_loss += sum_er
-                # generator_loss += sum_er
+                cc0 = fake_reg_z_dist_info['id_0_prob']
+                cc1 = fake_reg_z_dist_info['id_1_prob']
+                cc2 = fake_reg_z_dist_info['id_2_prob']
+                zz1 = fake_reg_z_dist_info['id_3_mean']
+                z_var = tf.concat(1, [cc0, cc1, cc2, zz1])
+                self.R0 = R0 = tf.reduce_sum(reg_z[:,0:6] * -tf.log(z_var[:,0:6] + TINY) + (1 - reg_z[:,0:6]) * -tf.log(1 - z_var[:,0:6] + TINY))/self.batch_size
+                # R0 = tf.pow((tf.reduce_sum(reg_z - z_var)),2.) /self.batch_size
+                self.log_vars.append(("C2X2C_er", R0))
+                discriminator_loss += R0/4.
+                generator_loss += R0/4.
 
                 s1 = real_reg_z_dist_info['id_0_prob']
                 s2 = real_reg_z_dist_info['id_1_prob']
                 s3 = real_reg_z_dist_info['id_2_prob']
                 s4 = real_reg_z_dist_info['id_3_mean']
-
                 x_ave = tf.zeros((100,28*28))
                 for i in range(10): # average 10 different noise
                     z_var = self.model.latent_dist.sample_prior(self.batch_size)
@@ -176,10 +176,12 @@ class InfoGANTrainer(object):
                                                  tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
                     x_regenearted, _ = self.model.generate(z_var_reduce)
                     x_ave += x_regenearted
-                sum_er = tf.reduce_sum(tf.pow(input_tensor - x_ave / 10., 2.)) / self.batch_size / 28 ** 2 * 30
-                self.log_vars.append(("X2C2X_er", sum_er))
-                discriminator_loss += sum_er
-                generator_loss += sum_er
+                x_ave = x_ave / 10.
+                self.R1 = R1 = tf.reduce_sum(input_tensor * -tf.log(x_ave+ TINY) + (1 - input_tensor) * -tf.log(1 - x_ave+ TINY))  / self.batch_size / 28 ** 2
+                # R1 = tf.reduce_sum(tf.multiply(tf.reduce_sum(tf.pow(input_tensor - x_ave , 2.),1) , self.penalty)) / self.batch_size / 28 ** 2 * 10
+                self.log_vars.append(("X2C2X_er", R1))
+                discriminator_loss += R1*5
+                generator_loss += R1*5
 
 
             for idx, dist_info in enumerate(self.model.reg_latent_dist.split_dist_info(fake_reg_z_dist_info)):
@@ -363,10 +365,10 @@ class InfoGANTrainer(object):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_30_12_49_23/rec_crs_2017_01_30_12_49_23_9000.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_02_01_10_39_42/rec_crs_2017_02_01_10_39_42_27000.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_30_12_49_23/rec_crs_2017_01_30_12_49_23_9000.ckpt')
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_02_01_10_39_42/rec_crs_2017_02_01_10_39_42_27000.ckpt')
 
             input_tensor, input_label = self.dataset.supervised_train.next_batch(self.batch_size)
 
@@ -388,7 +390,7 @@ class InfoGANTrainer(object):
                                              tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
                 x_regenearted, _ = self.model.generate(z_var_reduce)
                 x_ave += x_regenearted
-            sum_er = tf.reduce_sum(tf.pow(input_tensor - x_ave / 10., 2.)) / self.batch_size / 28 ** 2 * 30
+            sum_er = tf.reduce_sum(tf.pow(input_tensor - x_ave / 10., 2.)) / self.batch_size / 28 ** 2 * 10
 
             x_in = input_tensor
             x_regen = x_ave.eval()
@@ -397,11 +399,23 @@ class InfoGANTrainer(object):
             import seaborn
             import matplotlib.pyplot as plt
             ii = 12
+            # x
             plt.figure()
             plt.imshow(x_in[ii].reshape(28, 28))
+            # x->c
+            print(z_regen[ii])
+            # x->c->x
             plt.figure()
             plt.imshow(x_regen[ii].reshape(28, 28))
-            print(z_regen[ii])
+            # x->c->x->c
+            real_d, _, real_reg_z_dist_info, real_reg_dist_flat = self.model.discriminate(x_regen[ii])
+            print('z_regen_regen')
+            print('%0.16f' % real_d.eval())
+            print('%0.16f' % real_reg_z_dist_info['id_0_prob'].eval()[0][0])
+            print('%0.16f' % real_reg_z_dist_info['id_1_prob'].eval()[0][0])
+            print('%0.16f' % real_reg_z_dist_info['id_2_prob'].eval()[0][0])
+            print('%0.16f' % real_reg_z_dist_info['id_3_mean'].eval())
+            print('done')
 
     def classify(self):
         self.init_opt()

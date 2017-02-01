@@ -59,6 +59,14 @@ if __name__ == "__main__":
             (Categorical(2), True),
             (Uniform(1, fix_std=True), True),
         ]
+    elif network_type == "rec_crs2":
+        dataset = rec_crs(False)
+        latent_spec = [
+            (Uniform(1), False),
+            (Categorical(2), True),
+            (Categorical(2), True),
+            (Uniform(1, fix_std=True), True),
+        ]
     else:
         raise NotImplementedError
 
@@ -82,14 +90,14 @@ if __name__ == "__main__":
         info_reg_coeff=1.0,
         # generator_learning_rate=1e-4,
         # discriminator_learning_rate=2e-5,
-        generator_learning_rate=1e-3,
-        discriminator_learning_rate=2e-4,
+        generator_learning_rate=0.2e-3,
+        discriminator_learning_rate=0.4e-4,
         has_classifier = True,
         pretrain_classifier = True,
     )
 
-    # algo.train()
+    algo.train()
     # algo.regen()
-    algo.classify()
+    # algo.classify()
 
 
