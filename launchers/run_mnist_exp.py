@@ -4,7 +4,7 @@ from infogan.misc.distributions import Uniform, Categorical, Gaussian, MeanBerno
 
 import tensorflow as tf
 import os
-from infogan.misc.datasets import MnistDataset, ModelNet10, rec_crs
+from infogan.misc.datasets import MnistDataset, ModelNet10, rec_crs, rec_crs2
 from infogan.models.regularized_gan import RegularizedGAN
 from infogan.algos.infogan_trainer import InfoGANTrainer
 from infogan.misc.utils import mkdir_p
@@ -14,7 +14,7 @@ import datetime
 
 if __name__ == "__main__":
 
-    network_type = "rec_crs"
+    network_type = "rec_crs2"
     switch_categorical_label = True # Modified by Hope, for supervised learning
 
     now = datetime.datetime.now(dateutil.tz.tzlocal())
@@ -60,7 +60,7 @@ if __name__ == "__main__":
             (Uniform(1, fix_std=True), True),
         ]
     elif network_type == "rec_crs2":
-        dataset = rec_crs(False)
+        dataset = rec_crs2(False)
         latent_spec = [
             (Uniform(1), False),
             (Categorical(2), True),
@@ -90,14 +90,14 @@ if __name__ == "__main__":
         info_reg_coeff=1.0,
         # generator_learning_rate=1e-4,
         # discriminator_learning_rate=2e-5,
-        generator_learning_rate=0.2e-3,
-        discriminator_learning_rate=0.4e-4,
+        generator_learning_rate=0.1e-3,
+        discriminator_learning_rate=0.1e-4,
         has_classifier = True,
         pretrain_classifier = True,
     )
 
-    algo.train()
-    # algo.regen()
+    # algo.train()
+    algo.regen()
     # algo.classify()
 
 
