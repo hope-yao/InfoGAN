@@ -68,7 +68,7 @@ class RegularizedGAN(object):
                      # custom_deconv2d([0] + list(image_shape), k_h=4, k_w=4).
                      custom_deconv3d([0] + list(image_shape), k_h=4, k_w=4, k_d=4).
                      flatten())
-        elif network_type == "mnist" or network_type == "rec_crs":
+        elif network_type == "mnist" or network_type == "rec_crs" or network_type == "rec_crs2":
             with tf.variable_scope("d_net"):
                 shared_template = \
                     (pt.template("input").
