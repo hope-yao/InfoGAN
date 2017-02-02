@@ -90,14 +90,14 @@ if __name__ == "__main__":
         info_reg_coeff=1.0,
         # generator_learning_rate=1e-4,
         # discriminator_learning_rate=2e-5,
-        generator_learning_rate=0.1e-3,
-        discriminator_learning_rate=0.1e-4,
+        generator_learning_rate=1e-3,
+        discriminator_learning_rate=2e-4,
         has_classifier = True,
         pretrain_classifier = True,
     )
 
-    # algo.train()
-    algo.regen()
+    algo.train()
+    # algo.regen()
     # algo.classify()
 
 

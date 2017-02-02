@@ -74,12 +74,7 @@ class InfoGANTrainer(object):
                 s4 = tf.slice(z_var, [0, 5], [self.batch_size, 1])
                 s5 = tf.slice(z_var, [0, 7], [self.batch_size, 1])  # continuous c
                 z_var_reduce = tf.concat(1, [s1, s2, s3, s4, s5])
-                # self.log_vars.append(("z_var ", tf.reduce_mean(z_var)))
-                # self.log_vars.append(("z_var_reduce",  tf.reduce_mean(z_var_reduce) ))
                 fake_x, aaa = self.model.generate(z_var_reduce )
-                # self.log_vars.append(("aaa",  tf.reduce_mean(aaa) ))
-                # self.log_vars.append(("fake_x",  tf.reduce_mean(fake_x) ))
-                # fake_x, _ = self.model.generate(z_var)
                 real_d, _, real_reg_z_dist_info, real_reg_dist_flat = self.model.discriminate(input_tensor)
                 fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
             elif self.model.network_type == 'rec_crs2':
@@ -87,14 +82,8 @@ class InfoGANTrainer(object):
                 s2 = tf.slice(z_var, [0, 1], [self.batch_size, 1])
                 s3 = tf.slice(z_var, [0, 3], [self.batch_size, 1])
                 s4 = tf.slice(z_var, [0, 5], [self.batch_size, 1])
-                # s5 = tf.slice(z_var, [0, 7], [self.batch_size, 1])  # continuous c
                 z_var_reduce = tf.concat(1, [s1, s2, s3, s4])
-                # self.log_vars.append(("z_var ", tf.reduce_mean(z_var)))
-                # self.log_vars.append(("z_var_reduce",  tf.reduce_mean(z_var_reduce) ))
                 fake_x, aaa = self.model.generate(z_var_reduce)
-                # self.log_vars.append(("aaa",  tf.reduce_mean(aaa) ))
-                # self.log_vars.append(("fake_x",  tf.reduce_mean(fake_x) ))
-                # fake_x, _ = self.model.generate(z_var)
                 real_d, _, real_reg_z_dist_info, real_reg_dist_flat = self.model.discriminate(input_tensor)
                 fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
             else:
@@ -126,10 +115,7 @@ class InfoGANTrainer(object):
                                                    ])
                 else:
                     prediction = self.model.disc_reg_dist_info(real_reg_z_dist_info)['id_0_prob']
-                # classifier_loss = -tf.reduce_mean(input_label * tf.log(prediction+TINY))
                 self.classifier_loss = classifier_loss = -tf.reduce_sum(tf.log(tf.reduce_sum(tf.multiply(prediction, input_label) + tf.multiply((1 - prediction), (1 - input_label)), axis=1)))
-                # classifier_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(prediction,input_label))
-                # classifier_loss =  -tf.reduce_mean(tf.reduce_sum(input_label * tf.log(prediction+TINY),1)) #This is the actual value
                 discriminator_loss += (classifier_loss)
                 self.log_vars.append(("classifier_loss", classifier_loss))
                 classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
@@ -184,10 +170,9 @@ class InfoGANTrainer(object):
                     zz1 = fake_reg_z_dist_info['id_2_mean']
                     z_var = tf.concat(1, [cc0, cc1, zz1])
                     self.R0 = R0 = tf.reduce_sum(reg_z[:,0:4] * -tf.log(z_var[:,0:4] + TINY) + (1 - reg_z[:,0:4]) * -tf.log(1 - z_var[:,0:4] + TINY))/self.batch_size
-                # R0 = tf.pow((tf.reduce_sum(reg_z - z_var)),2.) /self.batch_size
                 self.log_vars.append(("C2X2C_er", R0))
-                discriminator_loss += R0/4.
-                generator_loss += R0/4.
+                # discriminator_loss += R0/4.
+                # generator_loss += R0/4.
 
                 s1 = real_reg_z_dist_info['id_0_prob']
                 s2 = real_reg_z_dist_info['id_1_prob']
@@ -216,10 +201,9 @@ class InfoGANTrainer(object):
                     x_ave += x_regenearted
                 x_ave = x_ave / 10.
                 self.R1 = R1 = tf.reduce_sum(input_tensor * -tf.log(x_ave+ TINY) + (1 - input_tensor) * -tf.log(1 - x_ave+ TINY))  / self.batch_size / 28 ** 2
-                # R1 = tf.reduce_sum(tf.multiply(tf.reduce_sum(tf.pow(input_tensor - x_ave , 2.),1) , self.penalty)) / self.batch_size / 28 ** 2 * 10
                 self.log_vars.append(("X2C2X_er", R1))
-                discriminator_loss += R1*5
-                generator_loss += R1*5
+                # discriminator_loss += R1*5
+                # generator_loss += R1*5
 
 
             for idx, dist_info in enumerate(self.model.reg_latent_dist.split_dist_info(fake_reg_z_dist_info)):
@@ -240,19 +224,17 @@ class InfoGANTrainer(object):
             self.log_vars.append(("min_fake_d", tf.reduce_min(fake_d)))
 
             # discriminator_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
-            # self.discriminator_trainer = pt.apply_optimizer(discriminator_optimizer, losses=[discriminator_loss],var_list=d_vars)
             discriminator_optimizer = tf.train.GradientDescentOptimizer(self.discriminator_learning_rate)
-            self.discriminator_trainer = pt.apply_optimizer(discriminator_optimizer, losses=[discriminator_loss])
-            # generator_optimizer = tf.train.GradientDescentOptimizer(self.generator_learning_rate)
-            # self.generator_trainer = pt.apply_optimizer(generator_optimizer, losses=[generator_loss], var_list=g_vars)
-            generator_optimizer = tf.train.AdamOptimizer(self.generator_learning_rate, beta1=0.5)
-            self.generator_trainer = pt.apply_optimizer(generator_optimizer, losses=[generator_loss])
+            self.discriminator_trainer = pt.apply_optimizer(discriminator_optimizer, losses=[discriminator_loss],var_list=d_vars)
 
-            R1_optimizer = tf.train.GradientDescentOptimizer(self.discriminator_learning_rate)
-            self.R1_trainer = pt.apply_optimizer(R1_optimizer, losses=[self.R1])
+            # generator_optimizer = tf.train.GradientDescentOptimizer(self.generator_learning_rate)
+            generator_optimizer = tf.train.AdamOptimizer(self.generator_learning_rate, beta1=0.5)
+            self.generator_trainer = pt.apply_optimizer(generator_optimizer, losses=[generator_loss], var_list=g_vars)
+
+            R_optimizer = tf.train.GradientDescentOptimizer(self.discriminator_learning_rate)
+            self.R_trainer = pt.apply_optimizer(R_optimizer, losses=[self.R1+self.R0])
 
             for k, v in self.log_vars:
-                # tf.scalar_summary(k, v)
                 tf.summary.scalar(k, v)
 
         with pt.defaults_scope(phase=pt.Phase.test):
@@ -267,7 +249,6 @@ class InfoGANTrainer(object):
                 z_var_reduce = []
                 if CLASS==3:
                     for cat in [ [0, 1, 1,], [1, 0, 0,], [0, 1, 0], [0, 0, 1, ], [1, 1, 0,]]: # only the first categorical val is useful
-                    # for cat in [ [0,1, 0,1, 0,1,], [1,0, 0,1, 0,1,], [0,1, 1,0, 0,1], [0,1, 0,1, 1,0, ], [1,0, 1,0, 0,0,]]: # only the first categorical val is useful
                         for nregidx in [0, 1]:
                             for contidx in range(0, 10, 1):
                                 cont = contidx / 10.
@@ -281,7 +262,6 @@ class InfoGANTrainer(object):
                     imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
                 else:
                     for cat in [[1, 0], [0, 1], [1, 1,],[0,0]]:  # only the first categorical val is useful
-                        # for cat in [ [0,1, 0,1, 0,1,], [1,0, 0,1, 0,1,], [0,1, 1,0, 0,1], [0,1, 0,1, 1,0, ], [1,0, 1,0, 0,0,]]: # only the first categorical val is useful
                         for nregidx in [0, 1/3., 1]:
                             for contidx in range(0, 10, 1):
                                 cont = contidx / 10.
@@ -509,13 +489,7 @@ class InfoGANTrainer(object):
                               axis=1)))
             print(classifier_loss.eval())
 
-            # real_d, _, real_reg_z_dist_info, reg_dist_flat = self.model.discriminate(img_in)
-            # dist_flat = self.model.latent_dist.activate_dist(reg_dist_flat)
-            # zz0 = dist_flat['id_0_mean']  # regularized continuous variable
-            # tt0 = dist_flat['id_1_prob']
-            # tt1 = dist_flat['id_2_prob']
-            # tt2 = dist_flat['id_3_prob']
-            # # zz1 = dist_flat["id_4_mean"] # this is noise, but not output by the decoder network
+
             z_var = np.concatenate([
                 np.asarray([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]*10).reshape(self.batch_size, 1),
                 tt0[:, 0].eval().reshape(self.batch_size, 1),
@@ -537,15 +511,12 @@ class InfoGANTrainer(object):
         self.init_opt()
 
         init = tf.initialize_all_variables()
-        # init = tf.global_variables_initializer
 
         with tf.Session() as sess:
             sess.run(init)
 
-            # summary_op = tf.merge_all_summaries()
             summary_op = tf.summary.merge_all()
 
-            # summary_writer = tf.train.SummaryWriter(self.log_dir, sess.graph)
             summary_writer = tf.summary.FileWriter(self.log_dir, sess.graph)
 
             saver = tf.train.Saver()
@@ -582,6 +553,7 @@ class InfoGANTrainer(object):
                         feed_dict = {self.input_tensor: x}
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
                     sess.run(self.generator_trainer, feed_dict)
+                    sess.run(self.R_trainer, feed_dict)
                     all_log_vals.append(log_vals)
                     counter += 1
 
@@ -589,8 +561,6 @@ class InfoGANTrainer(object):
                         snapshot_name = "%s_%s" % (self.exp_name, str(counter))
                         fn = saver.save(sess, "%s/%s.ckpt" % (self.checkpoint_dir, snapshot_name))
                         print("Model saved in file: %s" % fn)
-                # img_path = saver_imgs.save(sess, "imgs.ckpt")
-                # print("Generated images saved in file: %s" % img_path)
 
                 x, y = self.dataset.supervised_train.next_batch(self.batch_size)
                 if self.has_classifier:
