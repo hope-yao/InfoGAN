@@ -115,13 +115,15 @@ class InfoGANTrainer(object):
                                                    ])
                 else:
                     prediction = self.model.disc_reg_dist_info(real_reg_z_dist_info)['id_0_prob']
-                self.classifier_loss = classifier_loss = -tf.reduce_sum(tf.log(tf.reduce_sum(tf.multiply(prediction, input_label) + tf.multiply((1 - prediction), (1 - input_label)), axis=1)))
+                self.classifier_loss  = classifier_loss  = tf.reduce_sum(input_label * -tf.log(prediction + TINY) + (1 - input_label) * -tf.log(1 - prediction + TINY))/self.batch_size
+                # self.classifier_loss = classifier_loss = -tf.reduce_sum(tf.log(tf.reduce_sum(tf.multiply(prediction, input_label) + tf.multiply((1 - prediction), (1 - input_label)), axis=1)))
                 discriminator_loss += (classifier_loss)
                 self.log_vars.append(("classifier_loss", classifier_loss))
-                classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+
                 all_vars = tf.trainable_variables()
                 d_vars = [var for var in all_vars if var.name.startswith('d_')]
-                self.classifer_trainer = pt.apply_optimizer(classifer_optimizer, losses=[classifier_loss], var_list=d_vars)
+                classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+                self.classifer_trainer = pt.apply_optimizer(classifer_optimizer, losses=[classifier_loss])
 
             mi_est = tf.constant(0.)
             cross_ent = tf.constant(0.)
@@ -231,8 +233,9 @@ class InfoGANTrainer(object):
             generator_optimizer = tf.train.AdamOptimizer(self.generator_learning_rate, beta1=0.5)
             self.generator_trainer = pt.apply_optimizer(generator_optimizer, losses=[generator_loss], var_list=g_vars)
 
-            R_optimizer = tf.train.GradientDescentOptimizer(self.discriminator_learning_rate)
-            self.R_trainer = pt.apply_optimizer(R_optimizer, losses=[self.R1+self.R0])
+            # R_optimizer = tf.train.GradientDescentOptimizer(self.discriminator_learning_rate)
+            R_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+            self.R_trainer = pt.apply_optimizer(R_optimizer, losses=[self.R1*10.+self.R0])
 
             for k, v in self.log_vars:
                 tf.summary.scalar(k, v)
@@ -241,6 +244,80 @@ class InfoGANTrainer(object):
             with tf.variable_scope("model", reuse=True) as scope:
                 self.visualize_all_factors()
                 print('testing visual')
+
+    def train(self):
+
+        self.init_opt()
+
+        init = tf.initialize_all_variables()
+
+        with tf.Session() as sess:
+            sess.run(init)
+
+            summary_op = tf.summary.merge_all()
+
+            summary_writer = tf.summary.FileWriter(self.log_dir, sess.graph)
+
+            saver = tf.train.Saver()
+
+            counter = 0
+
+            log_vars = [x for _, x in self.log_vars]
+            log_keys = [x for x, _ in self.log_vars]
+
+            if self.pretrain_classifier:
+                for epoch in range(100):
+                    for i in range(20):
+                        x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                        feed_dict = {self.input_tensor: x, self.input_label: y}
+                        sess.run(self.classifer_trainer, feed_dict)
+                        summary_str = sess.run(summary_op, feed_dict)
+                        summary_writer.add_summary(summary_str, counter)
+                        counter += 1
+                fn = saver.save(sess, "%s/%s.ckpt" % (self.checkpoint_dir, 'Classifier'))
+                print("Classifier saved in file: %s" % fn)
+
+            for epoch in range(self.max_epoch):
+                widgets = ["epoch #%d|" % epoch, Percentage(), Bar(), ETA()]
+                pbar = ProgressBar(maxval=self.updates_per_epoch, widgets=widgets)
+                pbar.start()
+
+                all_log_vals = []
+                for i in range(self.updates_per_epoch):
+                    pbar.update(i)
+                    x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                    if self.has_classifier:
+                        feed_dict = {self.input_tensor: x, self.input_label: y}
+                    else:
+                        feed_dict = {self.input_tensor: x}
+                    log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
+                    sess.run(self.generator_trainer, feed_dict)
+                    sess.run(self.R_trainer, feed_dict)
+                    all_log_vals.append(log_vals)
+                    counter += 1
+
+                    if counter % self.snapshot_interval == 0:
+                        snapshot_name = "%s_%s" % (self.exp_name, str(counter))
+                        fn = saver.save(sess, "%s/%s.ckpt" % (self.checkpoint_dir, snapshot_name))
+                        print("Model saved in file: %s" % fn)
+
+                x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                if self.has_classifier:
+                    feed_dict = {self.input_tensor: x, self.input_label: y}
+                else:
+                    feed_dict = {self.input_tensor: x}
+                summary_str = sess.run(summary_op, feed_dict)
+                summary_writer.add_summary(summary_str, counter)
+
+                avg_log_vals = np.mean(np.array(all_log_vals), axis=0)
+                log_dict = dict(zip(log_keys, avg_log_vals))
+
+                log_line = "; ".join("%s: %s" % (str(k), str(v)) for k, v in zip(log_keys, avg_log_vals))
+                print("Epoch %d | " % (epoch) + log_line)
+                sys.stdout.flush()
+                if np.any(np.isnan(avg_log_vals)):
+                    raise ValueError("NaN detected!")
+
 
     def visualize_all_factors(self):
         if self.model.network_type=='rec_crs' or self.model.network_type=='rec_crs2':
@@ -505,76 +582,3 @@ class InfoGANTrainer(object):
             plt.imshow(img[0])
             plt.show()
             plt.hold(True)
-
-    def train(self):
-
-        self.init_opt()
-
-        init = tf.initialize_all_variables()
-
-        with tf.Session() as sess:
-            sess.run(init)
-
-            summary_op = tf.summary.merge_all()
-
-            summary_writer = tf.summary.FileWriter(self.log_dir, sess.graph)
-
-            saver = tf.train.Saver()
-
-            counter = 0
-
-            log_vars = [x for _, x in self.log_vars]
-            log_keys = [x for x, _ in self.log_vars]
-
-            if self.pretrain_classifier:
-                for epoch in range(50):
-                    for i in range(20):
-                        x, y = self.dataset.supervised_train.next_batch(self.batch_size)
-                        feed_dict = {self.input_tensor: x, self.input_label: y}
-                        sess.run(self.classifer_trainer, feed_dict)
-                        summary_str = sess.run(summary_op, feed_dict)
-                        summary_writer.add_summary(summary_str, counter)
-                        counter += 1
-                fn = saver.save(sess, "%s/%s.ckpt" % (self.checkpoint_dir, 'Classifier'))
-                print("Classifier saved in file: %s" % fn)
-
-            for epoch in range(self.max_epoch):
-                widgets = ["epoch #%d|" % epoch, Percentage(), Bar(), ETA()]
-                pbar = ProgressBar(maxval=self.updates_per_epoch, widgets=widgets)
-                pbar.start()
-
-                all_log_vals = []
-                for i in range(self.updates_per_epoch):
-                    pbar.update(i)
-                    x, y = self.dataset.supervised_train.next_batch(self.batch_size)
-                    if self.has_classifier:
-                        feed_dict = {self.input_tensor: x, self.input_label: y}
-                    else:
-                        feed_dict = {self.input_tensor: x}
-                    log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
-                    sess.run(self.generator_trainer, feed_dict)
-                    sess.run(self.R_trainer, feed_dict)
-                    all_log_vals.append(log_vals)
-                    counter += 1
-
-                    if counter % self.snapshot_interval == 0:
-                        snapshot_name = "%s_%s" % (self.exp_name, str(counter))
-                        fn = saver.save(sess, "%s/%s.ckpt" % (self.checkpoint_dir, snapshot_name))
-                        print("Model saved in file: %s" % fn)
-
-                x, y = self.dataset.supervised_train.next_batch(self.batch_size)
-                if self.has_classifier:
-                    feed_dict = {self.input_tensor: x, self.input_label: y}
-                else:
-                    feed_dict = {self.input_tensor: x}
-                summary_str = sess.run(summary_op, feed_dict)
-                summary_writer.add_summary(summary_str, counter)
-
-                avg_log_vals = np.mean(np.array(all_log_vals), axis=0)
-                log_dict = dict(zip(log_keys, avg_log_vals))
-
-                log_line = "; ".join("%s: %s" % (str(k), str(v)) for k, v in zip(log_keys, avg_log_vals))
-                print("Epoch %d | " % (epoch) + log_line)
-                sys.stdout.flush()
-                if np.any(np.isnan(avg_log_vals)):
-                    raise ValueError("NaN detected!")
