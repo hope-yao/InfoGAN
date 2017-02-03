@@ -57,8 +57,8 @@ class InfoGANTrainer(object):
         if self.has_classifier:
             if self.model.network_type=='rec_crs':
                 self.input_label = input_label= tf.placeholder(tf.float32, [self.batch_size, 3]) # 3 different classes
-                self.penalty = input_label[:, 0] + input_label[:, 1] + input_label[:, 2] * 50
-                # self.penalty = tf.ones((self.batch_size,1))
+                # self.penalty = input_label[:, 0] + input_label[:, 1] + input_label[:, 2] * 50
+                self.penalty = tf.ones((self.batch_size,1))
             elif self.model.network_type == 'rec_crs2':
                 self.input_label = input_label = tf.placeholder(tf.float32,[self.batch_size, 2])  # 3 different classes
                 self.penalty = tf.ones((self.batch_size,1))
@@ -100,7 +100,7 @@ class InfoGANTrainer(object):
             self.log_vars.append(("generator_loss", tf.reduce_mean(generator_loss )))
 
             if self.has_classifier:
-                if self.model.network_type=='rec_crs':
+                if self.model.network_type=='rec_crs' or self.model.network_type=='rec_crs2':
                     tt = self.model.disc_reg_dist_info(real_reg_z_dist_info)
                     tt0 = tt['id_0_prob']
                     tt1 = tt['id_1_prob']
@@ -123,7 +123,7 @@ class InfoGANTrainer(object):
                 all_vars = tf.trainable_variables()
                 d_vars = [var for var in all_vars if var.name.startswith('d_')]
                 classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
-                self.classifer_trainer = pt.apply_optimizer(classifer_optimizer, losses=[classifier_loss])
+                self.classifer_trainer = pt.apply_optimizer(classifer_optimizer, losses=[classifier_loss], var_list = d_vars)
 
             mi_est = tf.constant(0.)
             cross_ent = tf.constant(0.)
@@ -266,7 +266,7 @@ class InfoGANTrainer(object):
             log_keys = [x for x, _ in self.log_vars]
 
             if self.pretrain_classifier:
-                for epoch in range(100):
+                for epoch in range(200):
                     for i in range(20):
                         x, y = self.dataset.supervised_train.next_batch(self.batch_size)
                         feed_dict = {self.input_tensor: x, self.input_label: y}
