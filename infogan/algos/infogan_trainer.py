@@ -117,7 +117,7 @@ class InfoGANTrainer(object):
                     prediction = self.model.disc_reg_dist_info(real_reg_z_dist_info)['id_0_prob']
                 self.classifier_loss  = classifier_loss  = tf.reduce_sum(input_label * -tf.log(prediction + TINY) + (1 - input_label) * -tf.log(1 - prediction + TINY))/self.batch_size
                 # self.classifier_loss = classifier_loss = -tf.reduce_sum(tf.log(tf.reduce_sum(tf.multiply(prediction, input_label) + tf.multiply((1 - prediction), (1 - input_label)), axis=1)))
-                discriminator_loss += (classifier_loss)
+                discriminator_loss += (classifier_loss*100)
                 self.log_vars.append(("classifier_loss", classifier_loss))
 
                 all_vars = tf.trainable_variables()

@@ -244,22 +244,26 @@ class rec_crs2(object):
     def __init__(self,switch_categorical_label):
 
         data = np.load('rec_crs.npy')
+
         data0 = data.item()['rectcrs_img']
         data1 = data.item()['rect_img']
-        # data2 = data.item()['cross_img']
-        # data3 = data.item()['sph_img']
-        # self.label = label = [[[1, 1, 0]], [[1, 0, 0]], [[0, 1, 0]], [[0, 0, 1]]]
         self.label = label = [[[1, 1]], [[0, 1]]]
         label1 = np.asarray(label[0]*data0.shape[0])
         label2 = np.asarray(label[1]*data1.shape[0])
-        # label0 = np.asarray([[1,0,0]]*data0.shape[0])
-        # label1 = np.asarray([[0,1,0]]*data1.shape[0])
-        # label2 = np.asarray([[0,0,1]]*data2.shape[0])
-
         images = np.concatenate([data0, data1])
         labels = np.concatenate([label1, label2])
         labels = np.uint8(labels)
         images = images.reshape(images.shape[0],28,28,1)
+
+        # data1 = data.item()['rect_img']
+        # data2 = data.item()['cross_img']
+        # self.label = label = [[[1, 0]], [[0, 1]]]
+        # label1 = np.asarray(label[0]*data1.shape[0])
+        # label2 = np.asarray(label[1]*data2.shape[0])
+        # images = np.concatenate([data1, data2])
+        # labels = np.concatenate([label1, label2])
+        # labels = np.uint8(labels)
+        # images = images.reshape(images.shape[0],28,28,1)
 
         from tensorflow.contrib.learn.python.learn.datasets.mnist import DataSet
         from tensorflow.python.framework import dtypes
