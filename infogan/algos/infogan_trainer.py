@@ -271,6 +271,7 @@ class InfoGANTrainer(object):
                         x, y = self.dataset.supervised_train.next_batch(self.batch_size)
                         feed_dict = {self.input_tensor: x, self.input_label: y}
                         sess.run(self.classifer_trainer, feed_dict)
+                        sess.run(self.R_trainer, feed_dict)
                         summary_str = sess.run(summary_op, feed_dict)
                         summary_writer.add_summary(summary_str, counter)
                         counter += 1
