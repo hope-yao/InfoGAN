@@ -87,7 +87,22 @@ class RegularizedGAN(object):
                      custom_fully_connected(128).
                      fc_batch_norm().
                      apply(leaky_rectify).
-                     custom_fully_connected(self.reg_latent_dist.dist_flat_dim))
+                     custom_fully_connected(self.latent_dist.dist_flat_dim))  # modified by Hope, also output reconstruction of noise variables
+                self.encoder_template_all = \
+                    (shared_template.
+                     custom_fully_connected(128).
+                     fc_batch_norm().
+                     apply(leaky_rectify))
+
+            with tf.variable_scope("c_net"):
+                self.classifier = \
+                    (self.encoder_template_all.
+                     custom_fully_connected(2*2))
+
+            with tf.variable_scope("v_net"):
+                self.variations = \
+                    (self.encoder_template_all.
+                     custom_fully_connected(2*2))
 
             with tf.variable_scope("g_net"):
                 self.generator_template = \
@@ -159,11 +174,12 @@ class RegularizedGAN(object):
     def discriminate(self, x_var):
         d_out = self.discriminator_template.construct(input=x_var)
         d = tf.nn.sigmoid(d_out[:, 0])
-        # d = tf.nn.softmax(d_out)
-        # d = tf.nn.softmax_cross_entropy_with_logits(d,label) # Modified by Hope, for supervised learning
-        reg_dist_flat = self.encoder_template.construct(input=x_var)
-        reg_dist_info = self.reg_latent_dist.activate_dist(reg_dist_flat)
-        return d, self.reg_latent_dist.sample(reg_dist_info), reg_dist_info, reg_dist_flat
+        c = self.classifier.construct(input=x_var)
+        z = self.variations.construct(input=x_var)
+        reg_dist_flat = tf.concat(1, [z[:,0:2],c,z[:,2:4]])
+        # reg_dist_flat = self.encoder_template.construct(input=x_var)
+        reg_dist_info = self.latent_dist.activate_dist(reg_dist_flat)
+        return d, self.latent_dist.sample(reg_dist_info), reg_dist_info, reg_dist_flat
 
     def generate(self, z_var):
         x_dist_flat = self.generator_template.construct(input=z_var)

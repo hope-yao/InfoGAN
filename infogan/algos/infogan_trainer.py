@@ -101,11 +101,11 @@ class InfoGANTrainer(object):
 
             if self.has_classifier:
                 if self.model.network_type=='rec_crs' or self.model.network_type=='rec_crs2':
-                    tt = self.model.disc_reg_dist_info(real_reg_z_dist_info)
-                    tt0 = tt['id_0_prob']
-                    tt1 = tt['id_1_prob']
+                    # tt = self.model.disc_reg_dist_info(real_reg_z_dist_info)
+                    tt0 = real_reg_z_dist_info['id_1_prob']
+                    tt1 = real_reg_z_dist_info['id_2_prob']
                     if CLASS == 3:
-                        tt2 = tt['id_2_prob']
+                        tt2 = real_reg_z_dist_info['id_3_prob']
                         # prediction = tf.concat(1, [tt0[:,0], tt1[:,0], tt2[:,0]])
                         prediction = tf.concat(1, [tf.reshape(tt0[:, 0], (self.batch_size, 1)), tf.reshape(tt1[:, 0], (self.batch_size, 1)),
                                                    tf.reshape(tt2[:, 0], (self.batch_size, 1))])
@@ -116,14 +116,8 @@ class InfoGANTrainer(object):
                 else:
                     prediction = self.model.disc_reg_dist_info(real_reg_z_dist_info)['id_0_prob']
                 self.classifier_loss  = classifier_loss  = tf.reduce_sum(input_label * -tf.log(prediction + TINY) + (1 - input_label) * -tf.log(1 - prediction + TINY))/self.batch_size
-                # self.classifier_loss = classifier_loss = -tf.reduce_sum(tf.log(tf.reduce_sum(tf.multiply(prediction, input_label) + tf.multiply((1 - prediction), (1 - input_label)), axis=1)))
                 discriminator_loss += (classifier_loss*100)
                 self.log_vars.append(("classifier_loss", classifier_loss))
-
-                all_vars = tf.trainable_variables()
-                d_vars = [var for var in all_vars if var.name.startswith('d_')]
-                classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
-                self.classifer_trainer = pt.apply_optimizer(classifer_optimizer, losses=[classifier_loss], var_list = d_vars)
 
             mi_est = tf.constant(0.)
             cross_ent = tf.constant(0.)
@@ -161,69 +155,64 @@ class InfoGANTrainer(object):
                     discriminator_loss -= self.info_reg_coeff * cont_mi_est
                     generator_loss -= self.info_reg_coeff * cont_mi_est
             else:
-                cc0 = fake_reg_z_dist_info['id_0_prob']
-                cc1 = fake_reg_z_dist_info['id_1_prob']
-                if CLASS == 3:
-                    cc2 = fake_reg_z_dist_info['id_2_prob']
-                    zz1 = fake_reg_z_dist_info['id_3_mean']
-                    z_var = tf.concat(1, [cc0, cc1, cc2, zz1])
-                    self.R0 = R0 = tf.reduce_sum(reg_z[:,0:6] * -tf.log(z_var[:,0:6] + TINY) + (1 - reg_z[:,0:6]) * -tf.log(1 - z_var[:,0:6] + TINY))/self.batch_size
-                else:
-                    zz1 = fake_reg_z_dist_info['id_2_mean']
-                    z_var = tf.concat(1, [cc0, cc1, zz1])
-                    self.R0 = R0 = tf.reduce_sum(reg_z[:,0:4] * -tf.log(z_var[:,0:4] + TINY) + (1 - reg_z[:,0:4]) * -tf.log(1 - z_var[:,0:4] + TINY))/self.batch_size
-                self.log_vars.append(("C2X2C_er", R0))
-                # discriminator_loss += R0/4.
-                # generator_loss += R0/4.
+                mean = real_reg_z_dist_info['id_0_mean']
+                stddev = real_reg_z_dist_info['id_0_stddev']
+                epsilon = tf.random_normal(tf.shape(mean))
+                s0 = mean + epsilon * stddev
 
-                s1 = real_reg_z_dist_info['id_0_prob']
-                s2 = real_reg_z_dist_info['id_1_prob']
-                if CLASS==3:
-                    s3 = real_reg_z_dist_info['id_2_prob']
-                    s4 = real_reg_z_dist_info['id_3_mean']
-                else:
-                    s4 = real_reg_z_dist_info['id_2_mean']
-                x_ave = tf.zeros((100,28*28))
-                for i in range(10): # average 10 different noise
-                    z_var = self.model.latent_dist.sample_prior(self.batch_size)
-                    s0 = tf.slice(z_var, [0, 0], [self.batch_size, 1])  # noise z
-                    if CLASS == 3:
-                        z_var_reduce = tf.concat(1, [tf.reshape(s0[:, 0], (self.batch_size, 1)),
-                                                     tf.reshape(s1[:, 0], (self.batch_size, 1)),
-                                                     tf.reshape(s2[:, 0], (self.batch_size, 1)),
-                                                     tf.reshape(s3[:, 0], (self.batch_size, 1)),
-                                                     tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
-                    else:
-                        z_var_reduce = tf.concat(1, [tf.reshape(s0[:, 0], (self.batch_size, 1)),
-                                                     tf.reshape(s1[:, 0], (self.batch_size, 1)),
-                                                     tf.reshape(s2[:, 0], (self.batch_size, 1)),
-                                                     tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
+                mean = real_reg_z_dist_info['id_3_mean']
+                stddev = real_reg_z_dist_info['id_3_stddev']
+                epsilon = tf.random_normal(tf.shape(mean))
+                s4 = mean + epsilon * stddev
 
-                    x_regenearted, _ = self.model.generate(z_var_reduce)
-                    x_ave += x_regenearted
-                x_ave = x_ave / 10.
+                s1 = real_reg_z_dist_info['id_1_prob']
+                s2 = real_reg_z_dist_info['id_2_prob']
+                z_var_reduce = tf.concat(1, [tf.reshape(s0[:, 0], (self.batch_size, 1)),
+                                             tf.reshape(s1[:, 0], (self.batch_size, 1)),
+                                             tf.reshape(s2[:, 0], (self.batch_size, 1)),
+                                             tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
+                x_ave, _ = self.model.generate(z_var_reduce)
                 self.R1 = R1 = tf.reduce_sum(input_tensor * -tf.log(x_ave+ TINY) + (1 - input_tensor) * -tf.log(1 - x_ave+ TINY))  / self.batch_size / 28 ** 2
-                self.log_vars.append(("X2C2X_er", R1))
+                self.log_vars.append(("R1_loss", R1))
+                R1_er = tf.reduce_sum(tf.multiply(tf.reduce_sum(tf.pow(input_tensor - x_ave , 2.),1) , self.penalty)) / self.batch_size / 28 ** 2
+                self.log_vars.append(("recon_er", R1_er))
                 # discriminator_loss += R1*5
                 # generator_loss += R1*5
 
+                # KL divergence for VAE-GAN
+                sigma0 = real_reg_z_dist_info['id_0_stddev']
+                mu0 = real_reg_z_dist_info['id_0_mean']
+                sigma1 = real_reg_z_dist_info['id_3_stddev']
+                mu1 = real_reg_z_dist_info['id_3_mean']
+                self.KLD = -0.5 * tf.reduce_sum(1 + tf.log(tf.pow(sigma0,2)) - tf.pow(mu0,2) - tf.pow(sigma0,2))
+                self.KLD += -0.5 * tf.reduce_sum(1 + tf.log(tf.pow(sigma1,2)) - tf.pow(mu1, 2) - tf.pow(sigma1, 2))
 
-            for idx, dist_info in enumerate(self.model.reg_latent_dist.split_dist_info(fake_reg_z_dist_info)):
-                if "stddev" in dist_info:
-                    self.log_vars.append(("max_std_%d" % idx, tf.reduce_max(dist_info["stddev"])))
-                    self.log_vars.append(("min_std_%d" % idx, tf.reduce_min(dist_info["stddev"])))
-
-            self.log_vars.append(("MI", mi_est))
-            self.log_vars.append(("CrossEnt", cross_ent))
+            # for idx, dist_info in enumerate(self.model.reg_latent_dist.split_dist_info(fake_reg_z_dist_info)):
+            #     if "stddev" in dist_info:
+            #         self.log_vars.append(("max_std_%d" % idx, tf.reduce_max(dist_info["stddev"])))
+            #         self.log_vars.append(("min_std_%d" % idx, tf.reduce_min(dist_info["stddev"])))
+            #
+            # self.log_vars.append(("MI", mi_est))
+            # self.log_vars.append(("CrossEnt", cross_ent))
 
             all_vars = tf.trainable_variables()
             d_vars = [var for var in all_vars if var.name.startswith('d_')]
+            c_vars = [var for var in all_vars if var.name.startswith('c_')]
+            v_vars = [var for var in all_vars if var.name.startswith('v_')]
             g_vars = [var for var in all_vars if var.name.startswith('g_')]
 
             self.log_vars.append(("max_real_d", tf.reduce_max(real_d)))
             self.log_vars.append(("min_real_d", tf.reduce_min(real_d)))
             self.log_vars.append(("max_fake_d", tf.reduce_max(fake_d)))
             self.log_vars.append(("min_fake_d", tf.reduce_min(fake_d)))
+
+            classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+            self.classifer_trainer = pt.apply_optimizer(classifer_optimizer, losses=[classifier_loss], var_list=d_vars+c_vars)
+
+            vae_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+            self.vae_trainer = pt.apply_optimizer(vae_optimizer, losses=[self.R1+self.KLD], var_list=g_vars+v_vars+d_vars)
+            self.log_vars.append(("KLD", tf.reduce_mean(self.KLD)))
+            self.log_vars.append(("vae", tf.reduce_mean(self.R1+self.KLD)))
 
             # discriminator_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
             discriminator_optimizer = tf.train.GradientDescentOptimizer(self.discriminator_learning_rate)
@@ -234,8 +223,9 @@ class InfoGANTrainer(object):
             self.generator_trainer = pt.apply_optimizer(generator_optimizer, losses=[generator_loss], var_list=g_vars)
 
             # R_optimizer = tf.train.GradientDescentOptimizer(self.discriminator_learning_rate)
-            R_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
-            self.R_trainer = pt.apply_optimizer(R_optimizer, losses=[self.R1*10.+self.R0])
+            R_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate/50., beta1=0.5)
+            # self.R_trainer = pt.apply_optimizer(R_optimizer, losses=[self.R1*10.+self.R0])
+            self.R1_trainer = pt.apply_optimizer(R_optimizer, losses=[self.R1])
 
             for k, v in self.log_vars:
                 tf.summary.scalar(k, v)
@@ -266,12 +256,14 @@ class InfoGANTrainer(object):
             log_keys = [x for x, _ in self.log_vars]
 
             if self.pretrain_classifier:
-                for epoch in range(200):
+                for epoch in range(400):
                     for i in range(20):
                         x, y = self.dataset.supervised_train.next_batch(self.batch_size)
                         feed_dict = {self.input_tensor: x, self.input_label: y}
-                        sess.run(self.classifer_trainer, feed_dict)
-                        sess.run(self.R_trainer, feed_dict)
+                        if epoch<100: #%5 == 0:
+                            sess.run(self.classifer_trainer, feed_dict)
+                        else:
+                            sess.run(self.vae_trainer, feed_dict)
                         summary_str = sess.run(summary_op, feed_dict)
                         summary_writer.add_summary(summary_str, counter)
                         counter += 1
@@ -462,52 +454,57 @@ class InfoGANTrainer(object):
             new_saver = tf.train.import_meta_graph(model_name)
             saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_26_17_27_12/rec_crs_2017_01_26_17_27_12_9000.ckpt')
 
-            self.visualize_all_factors()
-            from infogan.misc.test_saved_model3d import plot_gen
-            imgs = self.imgs.eval()
-        # plot_gen(imgs)
-        np.save('imgs',imgs)
+            a = np.asarray([[x / 10., y / 10.] for x in range(10) for y in range(10)])
+            b = np.tile([1, 0], (100, 1))
+            c = np.concatenate((a[:, 0].reshape(100, 1), b, a[:, 1].reshape(100, 1)), axis=1)
+
+            x_ave, _ = self.model.generate(c.tolist())
+            imgs = x_ave.eval().reshape(10, 10, 28, 28)
+
+            import seaborn
+            import matplotlib.pyplot as plt
+            plt.figure()
+            for i in range(10):
+                for j in range(10):
+                    plt.subplot(10, 10, 10 * i + j + 1)
+                    fig = plt.imshow(imgs[i, j, :, :])
+                    fig.axes.get_xaxis().set_visible(False)
+                    fig.axes.get_yaxis().set_visible(False)
+            plt.show()
+
 
     def regen(self):
         self.init_opt()
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs2/rec_crs2_2017_02_02_10_12_46/rec_crs2_2017_02_02_10_12_46_39000.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs2/rec_crs2_2017_02_05_00_10_50/Classifier.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs2/rec_crs2_2017_02_02_10_12_46/rec_crs2_2017_02_02_10_12_46_39000.ckpt')
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs2/rec_crs2_2017_02_05_00_10_50/Classifier.ckpt')
 
             input_tensor, input_label = self.dataset.supervised_train.next_batch(self.batch_size)
 
             real_d, _, real_reg_z_dist_info, real_reg_dist_flat = self.model.discriminate(input_tensor)
 
-            s1 = real_reg_z_dist_info['id_0_prob']
-            s2 = real_reg_z_dist_info['id_1_prob']
-            if CLASS==3:
-                s3 = real_reg_z_dist_info['id_2_prob']
-                s4 = real_reg_z_dist_info['id_3_mean']
-            else:
-                s4 = real_reg_z_dist_info['id_2_mean']
+            s1 = real_reg_z_dist_info['id_1_prob']
+            s2 = real_reg_z_dist_info['id_2_prob']
 
-            x_ave = tf.zeros((100, 28 * 28))
-            for i in range(10):  # average 10 different noise
-                z_var = self.model.latent_dist.sample_prior(self.batch_size)
-                s0 = tf.slice(z_var, [0, 0], [self.batch_size, 1])  # noise z
-                if CLASS == 3:
-                    z_var_reduce = tf.concat(1, [tf.reshape(s0[:, 0], (self.batch_size, 1)),
-                                             tf.reshape(s1[:, 0], (self.batch_size, 1)),
-                                             tf.reshape(s2[:, 0], (self.batch_size, 1)),
-                                             tf.reshape(s3[:, 0], (self.batch_size, 1)),
-                                             tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
-                else:
-                    z_var_reduce = tf.concat(1, [tf.reshape(s0[:, 0], (self.batch_size, 1)),
-                                                 tf.reshape(s1[:, 0], (self.batch_size, 1)),
-                                                 tf.reshape(s2[:, 0], (self.batch_size, 1)),
-                                                 tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
-                x_regenearted, _ = self.model.generate(z_var_reduce)
-                x_ave += x_regenearted
-            sum_er = tf.reduce_sum(tf.pow(input_tensor - x_ave / 10., 2.)) / self.batch_size / 28 ** 2 * 10
+            mean = real_reg_z_dist_info['id_0_mean']
+            stddev = real_reg_z_dist_info['id_0_stddev']
+            epsilon = tf.random_normal(tf.shape(mean))
+            s0 = mean + epsilon * stddev
+
+            mean = real_reg_z_dist_info['id_3_mean']
+            stddev = real_reg_z_dist_info['id_3_stddev']
+            epsilon = tf.random_normal(tf.shape(mean))
+            s4 = mean + epsilon * stddev
+
+            z_var_reduce = tf.concat(1, [tf.reshape(s0[:, 0], (self.batch_size, 1)),
+                                         tf.reshape(s1[:, 0], (self.batch_size, 1)),
+                                         tf.reshape(s2[:, 0], (self.batch_size, 1)),
+                                         tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
+            x_ave, _ = self.model.generate(z_var_reduce)
 
             x_in = input_tensor
             x_regen = x_ave.eval()

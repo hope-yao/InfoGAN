@@ -66,6 +66,7 @@ if __name__ == "__main__":
             (Categorical(2), True),
             (Categorical(2), True),
             (Uniform(1, fix_std=True), True),
+            # (Uniform(10), False),
         ]
     else:
         raise NotImplementedError
