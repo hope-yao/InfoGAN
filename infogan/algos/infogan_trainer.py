@@ -81,7 +81,7 @@ class InfoGANTrainer(object):
                 s1 = tf.slice(z_var, [0, 0], [self.batch_size, 1])  # noise z
                 s2 = tf.slice(z_var, [0, 1], [self.batch_size, 1])
                 s3 = tf.slice(z_var, [0, 3], [self.batch_size, 1])
-                s4 = tf.slice(z_var, [0, 5], [self.batch_size, 1])
+                s4 = tf.slice(z_var, [0, 5], [self.batch_size, 11])
                 z_var_reduce = tf.concat(1, [s1, s2, s3, s4])
                 fake_x, aaa = self.model.generate(z_var_reduce)
                 real_d, _, real_reg_z_dist_info, real_reg_dist_flat = self.model.discriminate(input_tensor)
@@ -91,7 +91,6 @@ class InfoGANTrainer(object):
                 real_d, _, real_reg_z_dist_info, _ = self.model.discriminate(input_tensor)
                 fake_d, _, fake_reg_z_dist_info, fake_reg_dist_flat = self.model.discriminate(fake_x)
 
-            reg_z = self.model.reg_z(z_var)
 
             discriminator_loss = - tf.reduce_mean(tf.log(real_d + TINY) + tf.log(1. - fake_d + TINY))
             generator_loss = - tf.reduce_mean(tf.log(fake_d + TINY))
@@ -122,7 +121,8 @@ class InfoGANTrainer(object):
             mi_est = tf.constant(0.)
             cross_ent = tf.constant(0.)
 
-            if 0:
+            if 1:
+                reg_z = self.model.reg_z(z_var)
                 # compute for discrete and continuous codes separately
                 # discrete:
                 if len(self.model.reg_disc_latent_dist.dists) > 0:
@@ -170,7 +170,7 @@ class InfoGANTrainer(object):
                 z_var_reduce = tf.concat(1, [tf.reshape(s0[:, 0], (self.batch_size, 1)),
                                              tf.reshape(s1[:, 0], (self.batch_size, 1)),
                                              tf.reshape(s2[:, 0], (self.batch_size, 1)),
-                                             tf.reshape(s4[:, 0], (self.batch_size, 1)), ])
+                                             s4])
                 x_ave, _ = self.model.generate(z_var_reduce)
                 self.R1 = R1 = tf.reduce_sum(input_tensor * -tf.log(x_ave+ TINY) + (1 - input_tensor) * -tf.log(1 - x_ave+ TINY))  / self.batch_size / 28 ** 2
                 self.log_vars.append(("R1_loss", R1))
@@ -185,7 +185,8 @@ class InfoGANTrainer(object):
                 sigma1 = real_reg_z_dist_info['id_3_stddev']
                 mu1 = real_reg_z_dist_info['id_3_mean']
                 self.KLD = -0.5 * tf.reduce_sum(1 + tf.log(tf.pow(sigma0,2)) - tf.pow(mu0,2) - tf.pow(sigma0,2))
-                self.KLD += -0.5 * tf.reduce_sum(1 + tf.log(tf.pow(sigma1,2)) - tf.pow(mu1, 2) - tf.pow(sigma1, 2))
+                for i in range(sigma1._shape[1]):
+                    self.KLD += -0.5 * tf.reduce_sum(1 + tf.log(tf.pow(sigma1[:,i],2)) - tf.pow(mu1[:,i], 2) - tf.pow(sigma1[:,i], 2))
 
             # for idx, dist_info in enumerate(self.model.reg_latent_dist.split_dist_info(fake_reg_z_dist_info)):
             #     if "stddev" in dist_info:
@@ -232,7 +233,7 @@ class InfoGANTrainer(object):
 
         with pt.defaults_scope(phase=pt.Phase.test):
             with tf.variable_scope("model", reuse=True) as scope:
-                self.visualize_all_factors()
+                # self.visualize_all_factors()
                 print('testing visual')
 
     def train(self):
@@ -449,14 +450,14 @@ class InfoGANTrainer(object):
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             # load model
-            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_26_17_27_12/rec_crs_2017_01_26_17_27_12_9000.ckpt.meta'
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs2/rec_crs2_2017_02_05_21_01_56/Classifier.ckpt.meta'
             saver = tf.train.Saver()
             new_saver = tf.train.import_meta_graph(model_name)
-            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs/rec_crs_2017_01_26_17_27_12/rec_crs_2017_01_26_17_27_12_9000.ckpt')
+            saver.restore(sess, '/home/hope-yao/Documents/InfoGAN/ckt/rec_crs2/rec_crs2_2017_02_05_21_01_56/Classifier.ckpt')
 
             a = np.asarray([[x / 10., y / 10.] for x in range(10) for y in range(10)])
             b = np.tile([1, 0], (100, 1))
-            c = np.concatenate((a[:, 0].reshape(100, 1), b, a[:, 1].reshape(100, 1)), axis=1)
+            c = np.concatenate((a[:, 0].reshape(100, 1), b, a[:, 1].reshape(100, 1), np.zeros((100,10))), axis=1)
 
             x_ave, _ = self.model.generate(c.tolist())
             imgs = x_ave.eval().reshape(10, 10, 28, 28)

@@ -65,8 +65,7 @@ if __name__ == "__main__":
             (Uniform(1), False),
             (Categorical(2), True),
             (Categorical(2), True),
-            (Uniform(1, fix_std=True), True),
-            # (Uniform(10), False),
+            (Uniform(11, fix_std=True), True),
         ]
     else:
         raise NotImplementedError
@@ -98,6 +97,7 @@ if __name__ == "__main__":
     )
 
     algo.train()
+    # algo.generating()
     # algo.regen()
     # algo.classify()
 
