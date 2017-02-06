@@ -34,7 +34,7 @@ if __name__ == "__main__":
     dataset = MnistDataset()
 
     latent_spec = [
-        (Uniform(62), False),
+        (Uniform(1), False),
         (Categorical(10), True),
         (Uniform(1, fix_std=True), True),
         (Uniform(1, fix_std=True), True),
@@ -62,4 +62,6 @@ if __name__ == "__main__":
         discriminator_learning_rate=2e-4,
     )
 
-    algo.train()
+    # algo.train()
+    # algo.generating()
+    algo.regen()

@@ -19,7 +19,7 @@ class InfoGANTrainer(object):
                  checkpoint_dir="ckt",
                  max_epoch=100,
                  updates_per_epoch=100,
-                 snapshot_interval=10000,
+                 snapshot_interval=2500,
                  info_reg_coeff=1.0,
                  discriminator_learning_rate=2e-4,
                  generator_learning_rate=2e-4,
@@ -257,3 +257,93 @@ class InfoGANTrainer(object):
                 sys.stdout.flush()
                 if np.any(np.isnan(avg_log_vals)):
                     raise ValueError("NaN detected!")
+
+
+    def generating(self):
+        self.init_opt()
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+            # load model
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/mnist/mnist_2017_02_05_22_41_42/mnist_2017_02_05_22_41_42_5000.ckpt.meta'
+            saver = tf.train.Saver()
+            new_saver = tf.train.import_meta_graph(model_name)
+            saver.restore(sess,
+                          '/home/hope-yao/Documents/InfoGAN/ckt/mnist/mnist_2017_02_05_22_41_42/mnist_2017_02_05_22_41_42_5000.ckpt')
+
+            a = np.asarray([[x / 10., y / 10.] for x in range(10) for y in range(10)])
+            b = np.tile([1] + [0] * 9, (100, 1))
+            c = np.concatenate((np.zeros((100, 62)), b, a), axis=1)
+            x_ave, _ = self.model.generate(c.tolist())
+            imgs = x_ave.eval().reshape(10, 10, 28, 28)
+            import seaborn
+            import matplotlib.pyplot as plt
+            plt.figure()
+            for i in range(10):
+                for j in range(10):
+                    plt.subplot(10, 10, 10 * i + j + 1)
+                    fig = plt.imshow(imgs[i, j, :, :])
+                    fig.axes.get_xaxis().set_visible(False)
+                    fig.axes.get_yaxis().set_visible(False)
+            plt.show()
+
+    def regen(self):
+        self.init_opt()
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+            # load model
+            model_name = '/home/hope-yao/Documents/InfoGAN/ckt/mnist/mnist_2017_02_06_15_15_22/mnist_2017_02_06_15_15_22_5000.ckpt.meta'
+            saver = tf.train.Saver()
+            new_saver = tf.train.import_meta_graph(model_name)
+            saver.restore(sess,
+                          '/home/hope-yao/Documents/InfoGAN/ckt/mnist/mnist_2017_02_06_15_15_22/mnist_2017_02_06_15_15_22_5000.ckpt')
+
+            input_tensor,input_label = self.dataset.train.next_batch(self.batch_size)
+
+            real_d, _, real_reg_z_dist_info, real_reg_dist_flat = self.model.discriminate(input_tensor)
+
+            ss = np.ones((self.batch_size, 1))
+
+            s1 = real_reg_z_dist_info['id_0_prob']
+
+            mean = real_reg_z_dist_info['id_1_mean']
+            stddev = real_reg_z_dist_info['id_1_stddev']
+            epsilon = tf.random_normal(tf.shape(mean))
+            s0 = mean + epsilon * stddev
+
+            mean = real_reg_z_dist_info['id_2_mean']
+            stddev = real_reg_z_dist_info['id_2_stddev']
+            epsilon = tf.random_normal(tf.shape(mean))
+            s4 = mean + epsilon * stddev
+
+            z_var_reduce = tf.concat(1, [ss, s1, s0, s4])
+            #
+            x_ave, _ = self.model.generate(z_var_reduce)
+
+            x_in = input_tensor
+            x_regen = x_ave.eval()
+            z_regen = z_var_reduce.eval()
+
+            import seaborn
+            import matplotlib.pyplot as plt
+
+            ii = 12
+            # x
+            plt.figure()
+            plt.imshow(x_in[ii].reshape(28, 28))
+            # x->c
+            print(z_regen[ii])
+            # x->c->x
+            plt.figure()
+            plt.imshow(x_regen[ii].reshape(28, 28))
+            # x->c->x->c
+            real_d, _, real_reg_z_dist_info, real_reg_dist_flat = self.model.discriminate(x_regen[ii])
+            print('z_regen_regen')
+            # print('%0.16f' % real_d.eval())
+            # print('%0.16f' % real_reg_z_dist_info['id_0_prob'].eval()[0][0])
+            # print('%0.16f' % real_reg_z_dist_info['id_1_prob'].eval()[0][0])
+            # if CLASS == 3:
+            #     print('%0.16f' % real_reg_z_dist_info['id_2_prob'].eval()[0][0])
+            #     print('%0.16f' % real_reg_z_dist_info['id_3_mean'].eval())
+            # else:
+            #     print('%0.16f' % real_reg_z_dist_info['id_2_mean'].eval())
+            print('done')
