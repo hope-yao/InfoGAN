@@ -48,7 +48,17 @@ class InfoGANTrainer(object):
         self.input_tensor = input_tensor = tf.placeholder(tf.float32, [self.batch_size, self.dataset.image_dim])
 
         with pt.defaults_scope(phase=pt.Phase.train):
-            z_var = self.model.latent_dist.sample_prior(self.batch_size)
+            dim = 10
+            tt = Categorical(dim)
+            zz = tt.sample_prior(self.batch_size)
+            zzz = 1 - zz
+            z = [tf.concat(1, [tf.reshape(zz[:, i], (self.batch_size, 1)), tf.reshape(zzz[:, i], (self.batch_size, 1))])
+                 for i in range(dim)]
+            disc_z_var = tf.reshape(z, (self.batch_size, 20))
+
+            orig_z_var = self.model.latent_dist.sample_prior(self.batch_size)
+            z_var = tf.concat(1, [tf.reshape(orig_z_var[:, 0], (self.batch_size, 1)),disc_z_var, orig_z_var[:, -2:]])
+
             fake_x, _ = self.model.generate(z_var)
             real_d, _, _, _ = self.model.discriminate(input_tensor)
             fake_d, _, fake_reg_z_dist_info, _ = self.model.discriminate(fake_x)
@@ -129,80 +139,44 @@ class InfoGANTrainer(object):
 
     def visualize_all_factors(self):
         with tf.Session():
-            fixed_noncat = np.concatenate([
-                np.tile(
-                    self.model.nonreg_latent_dist.sample_prior(10).eval(),
-                    [10, 1]
-                ),
-                self.model.nonreg_latent_dist.sample_prior(self.batch_size - 100).eval(),
-            ], axis=0)
-            fixed_cat = np.concatenate([
-                np.tile(
-                    self.model.reg_latent_dist.sample_prior(10).eval(),
-                    [10, 1]
-                ),
-                self.model.reg_latent_dist.sample_prior(self.batch_size - 100).eval(),
-            ], axis=0)
+            for dist_idx in range(4):
+                cat = [[0, 1] * i + [1, 0] + [0, 1] * (9 - i) for i in range(10)]
+                zz = np.tile(np.asarray(cat), (10, 1))
+                cat = [[0, 1] * i + [1, 0] + [0, 1] * (9 - i) for i in range(10)]
+                zz = np.tile(np.asarray(cat), (10, 1))
+                cont = np.asarray([[i / 10.] * 10 for i in range(10)]).reshape(100, 1)
+                if dist_idx==0:
+                    z_var = np.concatenate([np.zeros((100, 1)), zz, np.zeros((100, 1)), cont[:]], axis=1)
+                elif dist_idx == 1:
+                    z_var = np.concatenate([np.zeros((100, 1)), zz, np.ones((100, 1)), cont[:]], axis=1)
+                elif dist_idx == 2:
+                    z_var = np.concatenate([np.zeros((100, 1)), cont[:], zz, np.zeros((100, 1))], axis=1)
+                elif dist_idx == 3:
+                    z_var = np.concatenate([np.zeros((100, 1)), cont[:], zz, np.ones((100, 1))], axis=1)
 
-        offset = 0
-        for dist_idx, dist in enumerate(self.model.reg_latent_dist.dists):
-            if isinstance(dist, Gaussian):
-                assert dist.dim == 1, "Only dim=1 is currently supported"
-                c_vals = []
-                for idx in xrange(10):
-                    c_vals.extend([-1.0 + idx * 2.0 / 9] * 10)
-                c_vals.extend([0.] * (self.batch_size - 100))
-                vary_cat = np.asarray(c_vals, dtype=np.float32).reshape((-1, 1))
-                cur_cat = np.copy(fixed_cat)
-                cur_cat[:, offset:offset+1] = vary_cat
-                offset += 1
-            elif isinstance(dist, Categorical):
-                lookup = np.eye(dist.dim, dtype=np.float32)
-                cat_ids = []
-                for idx in xrange(10):
-                    cat_ids.extend([idx] * 10)
-                cat_ids.extend([0] * (self.batch_size - 100))
-                cur_cat = np.copy(fixed_cat)
-                cur_cat[:, offset:offset+dist.dim] = lookup[cat_ids]
-                offset += dist.dim
-            elif isinstance(dist, Bernoulli):
-                assert dist.dim == 1, "Only dim=1 is currently supported"
-                lookup = np.eye(dist.dim, dtype=np.float32)
-                cat_ids = []
-                for idx in xrange(10):
-                    cat_ids.extend([int(idx / 5)] * 10)
-                cat_ids.extend([0] * (self.batch_size - 100))
-                cur_cat = np.copy(fixed_cat)
-                cur_cat[:, offset:offset+dist.dim] = np.expand_dims(np.array(cat_ids), axis=-1)
-                # import ipdb; ipdb.set_trace()
-                offset += dist.dim
-            else:
-                raise NotImplementedError
-            z_var = tf.constant(np.concatenate([fixed_noncat, cur_cat], axis=1))
+                _, x_dist_info = self.model.generate(z_var.tolist())
 
-            _, x_dist_info = self.model.generate(z_var)
-
-            # just take the mean image
-            if isinstance(self.model.output_dist, Bernoulli):
-                img_var = x_dist_info["p"]
-            elif isinstance(self.model.output_dist, Gaussian):
-                img_var = x_dist_info["mean"]
-            else:
-                raise NotImplementedError
-            img_var = self.dataset.inverse_transform(img_var)
-            rows = 10
-            img_var = tf.reshape(img_var, [self.batch_size] + list(self.dataset.image_shape))
-            img_var = img_var[:rows * rows, :, :, :]
-            imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
-            stacked_img = []
-            for row in xrange(rows):
-                row_img = []
-                for col in xrange(rows):
-                    row_img.append(imgs[row, col, :, :, :])
-                stacked_img.append(tf.concat(1, row_img))
-            imgs = tf.concat(0, stacked_img)
-            imgs = tf.expand_dims(imgs, 0)
-            tf.summary.image("image_%d_%s" % (dist_idx, dist.__class__.__name__), imgs)
+                # just take the mean image
+                if isinstance(self.model.output_dist, Bernoulli):
+                    img_var = x_dist_info["p"]
+                elif isinstance(self.model.output_dist, Gaussian):
+                    img_var = x_dist_info["mean"]
+                else:
+                    raise NotImplementedError
+                img_var = self.dataset.inverse_transform(img_var)
+                rows = 10
+                img_var = tf.reshape(img_var, [100] + list(self.dataset.image_shape))
+                img_var = img_var[:rows * rows, :, :, :]
+                imgs = tf.reshape(img_var, [rows, rows] + list(self.dataset.image_shape))
+                stacked_img = []
+                for row in xrange(rows):
+                    row_img = []
+                    for col in xrange(rows):
+                        row_img.append(imgs[row, col, :, :, :])
+                    stacked_img.append(tf.concat(1, row_img))
+                imgs = tf.concat(0, stacked_img)
+                imgs = tf.expand_dims(imgs, 0)
+                tf.summary.image("image_%d_" % (dist_idx), imgs)
 
 
     def train(self):
