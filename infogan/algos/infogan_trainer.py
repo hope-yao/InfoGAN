@@ -48,13 +48,13 @@ class InfoGANTrainer(object):
         self.input_tensor = input_tensor = tf.placeholder(tf.float32, [self.batch_size, self.dataset.image_dim])
 
         with pt.defaults_scope(phase=pt.Phase.train):
-            dim = 10
+            dim = 2
             tt = Categorical(dim)
             zz = tt.sample_prior(self.batch_size)
             zzz = 1 - zz
             z = [tf.concat(1, [tf.reshape(zz[:, i], (self.batch_size, 1)), tf.reshape(zzz[:, i], (self.batch_size, 1))])
                  for i in range(dim)]
-            disc_z_var = tf.reshape(z, (self.batch_size, 20))
+            disc_z_var = tf.reshape(z, (self.batch_size, 2*dim))
 
             orig_z_var = self.model.latent_dist.sample_prior(self.batch_size)
             z_var = tf.concat(1, [tf.reshape(orig_z_var[:, 0], (self.batch_size, 1)),disc_z_var, orig_z_var[:, -2:]])
@@ -123,7 +123,8 @@ class InfoGANTrainer(object):
             self.log_vars.append(("max_fake_d", tf.reduce_max(fake_d)))
             self.log_vars.append(("min_fake_d", tf.reduce_min(fake_d)))
 
-            discriminator_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+            # discriminator_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+            discriminator_optimizer = tf.train.GradientDescentOptimizer(self.discriminator_learning_rate * 5.)
             self.discriminator_trainer = pt.apply_optimizer(discriminator_optimizer, losses=[discriminator_loss],
                                                             var_list=d_vars)
 
@@ -140,19 +141,19 @@ class InfoGANTrainer(object):
     def visualize_all_factors(self):
         with tf.Session():
             for dist_idx in range(4):
-                cat = [[0, 1] * i + [1, 0] + [0, 1] * (9 - i) for i in range(10)]
-                zz = np.tile(np.asarray(cat), (10, 1))
-                cat = [[0, 1] * i + [1, 0] + [0, 1] * (9 - i) for i in range(10)]
-                zz = np.tile(np.asarray(cat), (10, 1))
-                cont = np.asarray([[i / 10.] * 10 for i in range(10)]).reshape(100, 1)
+
                 if dist_idx==0:
-                    z_var = np.concatenate([np.zeros((100, 1)), zz, np.zeros((100, 1)), cont[:]], axis=1)
+                    cat = [[0, 1] + [0, 1]] * 100
                 elif dist_idx == 1:
-                    z_var = np.concatenate([np.zeros((100, 1)), zz, np.ones((100, 1)), cont[:]], axis=1)
+                    cat = [[0, 1] + [1, 0]] * 100
                 elif dist_idx == 2:
-                    z_var = np.concatenate([np.zeros((100, 1)), cont[:], zz, np.zeros((100, 1))], axis=1)
+                    cat = [[1, 0] + [0, 1]] * 100
                 elif dist_idx == 3:
-                    z_var = np.concatenate([np.zeros((100, 1)), cont[:], zz, np.ones((100, 1))], axis=1)
+                    cat = [[1, 1] + [1, 1]] * 100
+
+                zz = np.asarray(cat)
+                cont = np.asarray([[i / 10., j/10.] for j in range(10) for i in range(10)]).reshape(100, 2)
+                z_var = np.concatenate([np.zeros((100, 1)), zz, cont[:]], axis=1)
 
                 _, x_dist_info = self.model.generate(z_var.tolist())
 
@@ -208,6 +209,9 @@ class InfoGANTrainer(object):
                     pbar.update(i)
                     x, _ = self.dataset.train.next_batch(self.batch_size)
                     feed_dict = {self.input_tensor: x}
+                    sess.run(self.discriminator_trainer, feed_dict)
+                    sess.run(self.discriminator_trainer, feed_dict)
+                    sess.run(self.discriminator_trainer, feed_dict)
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
                     sess.run(self.generator_trainer, feed_dict)
                     all_log_vals.append(log_vals)

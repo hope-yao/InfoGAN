@@ -4,7 +4,7 @@ from infogan.misc.distributions import Uniform, Categorical, Gaussian, MeanBerno
 
 import tensorflow as tf
 import os
-from infogan.misc.datasets import MnistDataset
+from infogan.misc.datasets import MnistDataset, rec_crs2
 from infogan.models.regularized_gan import RegularizedGAN
 from infogan.algos.infogan_trainer import InfoGANTrainer
 from infogan.misc.utils import mkdir_p
@@ -17,13 +17,13 @@ if __name__ == "__main__":
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
 
-    root_log_dir = "logs/mnist"
-    root_checkpoint_dir = "ckt/mnist"
+    root_log_dir = "logs/rectcrs"
+    root_checkpoint_dir = "ckt/rectcrs"
     batch_size = 128
     updates_per_epoch = 100
     max_epoch = 50
 
-    exp_name = "mnist_%s" % timestamp
+    exp_name = "rectcrs_%s" % timestamp
 
     log_dir = os.path.join(root_log_dir, exp_name)
     checkpoint_dir = os.path.join(root_checkpoint_dir, exp_name)
@@ -31,18 +31,10 @@ if __name__ == "__main__":
     mkdir_p(log_dir)
     mkdir_p(checkpoint_dir)
 
-    dataset = MnistDataset()
+    dataset = rec_crs2(False)
 
     latent_spec = [
         (Uniform(1), False),
-        (Categorical(2), True),
-        (Categorical(2), True),
-        (Categorical(2), True),
-        (Categorical(2), True),
-        (Categorical(2), True),
-        (Categorical(2), True),
-        (Categorical(2), True),
-        (Categorical(2), True),
         (Categorical(2), True),
         (Categorical(2), True),
         (Uniform(1, fix_std=True), True),
@@ -54,7 +46,7 @@ if __name__ == "__main__":
         latent_spec=latent_spec,
         batch_size=batch_size,
         image_shape=dataset.image_shape,
-        network_type="mnist",
+        network_type="rectcrs",
     )
 
     algo = InfoGANTrainer(
