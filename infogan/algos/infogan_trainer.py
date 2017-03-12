@@ -60,7 +60,7 @@ class InfoGANTrainer(object):
             z_var = tf.concat(1, [tf.reshape(orig_z_var[:, 0], (self.batch_size, 1)),disc_z_var, orig_z_var[:, -2:]])
 
             fake_x, _ = self.model.generate(z_var)
-            real_d, _, _, _ = self.model.discriminate(input_tensor)
+            real_d, _, real_reg_z_dist_info, _ = self.model.discriminate(input_tensor)
             fake_d, _, fake_reg_z_dist_info, _ = self.model.discriminate(fake_x)
 
             reg_z = self.model.reg_z(z_var)
@@ -116,6 +116,7 @@ class InfoGANTrainer(object):
 
             all_vars = tf.trainable_variables()
             d_vars = [var for var in all_vars if var.name.startswith('d_')]
+            dd_vars = [var for var in all_vars if var.name.startswith('dd_')]
             g_vars = [var for var in all_vars if var.name.startswith('g_')]
 
             self.log_vars.append(("max_real_d", tf.reduce_max(real_d)))
@@ -123,10 +124,23 @@ class InfoGANTrainer(object):
             self.log_vars.append(("max_fake_d", tf.reduce_max(fake_d)))
             self.log_vars.append(("min_fake_d", tf.reduce_min(fake_d)))
 
-            # discriminator_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
-            discriminator_optimizer = tf.train.GradientDescentOptimizer(self.discriminator_learning_rate * 5.)
+            self.input_label = input_label = tf.placeholder(tf.float32, [self.batch_size, 2*2])  # 10 different classes
+            tt = self.model.disc_reg_dist_info(real_reg_z_dist_info)
+            tt0 = real_reg_z_dist_info['id_0_prob']
+            tt1 = real_reg_z_dist_info['id_1_prob']
+            prediction = tf.concat(1, [tt0,tt1])
+            self.classifier_loss = classifier_loss = tf.reduce_sum(
+            input_label * -tf.log(prediction + TINY) + (1 - input_label) * -tf.log(1 - prediction + TINY)) / self.batch_size
+            discriminator_loss += (classifier_loss * 100)
+            self.log_vars.append(("classifier_loss", classifier_loss))
+
+            classifer_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+            self.classifer_trainer = pt.apply_optimizer(classifer_optimizer, losses=[classifier_loss], var_list=d_vars)
+
+            discriminator_optimizer = tf.train.AdamOptimizer(self.discriminator_learning_rate, beta1=0.5)
+            # discriminator_optimizer = tf.train.GradientDescentOptimizer(self.discriminator_learning_rate * 5.)
             self.discriminator_trainer = pt.apply_optimizer(discriminator_optimizer, losses=[discriminator_loss],
-                                                            var_list=d_vars)
+                                                            var_list=dd_vars)
 
             generator_optimizer = tf.train.AdamOptimizer(self.generator_learning_rate, beta1=0.5)
             self.generator_trainer = pt.apply_optimizer(generator_optimizer, losses=[generator_loss], var_list=g_vars)
@@ -199,6 +213,17 @@ class InfoGANTrainer(object):
             log_vars = [x for _, x in self.log_vars]
             log_keys = [x for x, _ in self.log_vars]
 
+            for epoch in range(40):
+                for i in range(20):
+                    x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                    feed_dict = {self.input_tensor: x, self.input_label: y}
+                    sess.run(self.classifer_trainer, feed_dict)
+                    summary_str = sess.run(summary_op, feed_dict)
+                    summary_writer.add_summary(summary_str, counter)
+                    counter += 1
+            fn = saver.save(sess, "%s/%s.ckpt" % (self.checkpoint_dir, 'Classifier'))
+            print("Classifier saved in file: %s" % fn)
+
             for epoch in range(self.max_epoch):
                 widgets = ["epoch #%d|" % epoch, Percentage(), Bar(), ETA()]
                 pbar = ProgressBar(maxval=self.updates_per_epoch, widgets=widgets)
@@ -207,11 +232,8 @@ class InfoGANTrainer(object):
                 all_log_vals = []
                 for i in range(self.updates_per_epoch):
                     pbar.update(i)
-                    x, _ = self.dataset.train.next_batch(self.batch_size)
-                    feed_dict = {self.input_tensor: x}
-                    sess.run(self.discriminator_trainer, feed_dict)
-                    sess.run(self.discriminator_trainer, feed_dict)
-                    sess.run(self.discriminator_trainer, feed_dict)
+                    x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                    feed_dict = {self.input_tensor: x,self.input_label: y}
                     log_vals = sess.run([self.discriminator_trainer] + log_vars, feed_dict)[1:]
                     sess.run(self.generator_trainer, feed_dict)
                     all_log_vals.append(log_vals)
@@ -222,9 +244,10 @@ class InfoGANTrainer(object):
                         fn = saver.save(sess, "%s/%s.ckpt" % (self.checkpoint_dir, snapshot_name))
                         print("Model saved in file: %s" % fn)
 
-                x, _ = self.dataset.train.next_batch(self.batch_size)
 
-                summary_str = sess.run(summary_op, {self.input_tensor: x})
+                x, y = self.dataset.supervised_train.next_batch(self.batch_size)
+                feed_dict = {self.input_tensor: x, self.input_label: y}
+                summary_str = sess.run(summary_op, feed_dict)
                 summary_writer.add_summary(summary_str, counter)
 
                 avg_log_vals = np.mean(np.array(all_log_vals), axis=0)
