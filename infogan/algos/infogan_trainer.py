@@ -138,7 +138,7 @@ class InfoGANTrainer(object):
             ], axis=0)
             fixed_cat = np.concatenate([
                 np.tile(
-                    self.model.reg_latent_dist.sample_prior(10).eval(),
+                    self.model.reg_latent_dist.sample_prior(10).eval(), #sampel batch size = 10
                     [10, 1]
                 ),
                 self.model.reg_latent_dist.sample_prior(self.batch_size - 100).eval(),
